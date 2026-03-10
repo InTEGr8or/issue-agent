@@ -340,6 +340,10 @@ def cmd_version(console: Console, promote: Optional[str] = None, tag: bool = Fal
                 check=True,
             )
 
+            # Sync uv.lock with the new version
+            console.print("[blue]Syncing uv.lock...[/blue]")
+            subprocess.run(["uv", "lock"], check=True)
+
             new_v = get_current_version()
             console.print(f"[bold green]Promoted to version {new_v}[/bold green]")
         else:
