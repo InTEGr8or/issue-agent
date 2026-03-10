@@ -20,4 +20,17 @@ build-backend = "hatchling.build"
 dev = [
     "mypy>=1.15.0",
     "ruff>=0.9.7",
+    "bump-my-version>=0.30.1",
 ]
+
+[tool.bumpversion]
+current_version = "0.1.0"
+parse = "(?P<major>\\d+)\\.(?P<minor>\\d+)\\.(?P<patch>\\d+)"
+serialize = ["{major}.{minor}.{patch}"]
+search = "version = \"{current_version}\""
+replace = "version = \"{new_version}\""
+
+[[tool.bumpversion.files]]
+filename = "pyproject.toml"
+search = "version = \"{current_version}\""
+replace = "version = \"{new_version}\""

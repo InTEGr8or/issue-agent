@@ -8,6 +8,7 @@ import sys
 import argparse
 from datetime import datetime
 import re
+import subprocess
 
 from taskagent.models.issue import Issue, USV_DELIM
 
@@ -61,6 +62,17 @@ def find_issue_file(slug: str) -> Optional[Path]:
             
     return None
 
+def get_git_commit() -> str:
+    """Get the short git commit hash."""
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"], 
+            stderr=subprocess.DEVNULL,
+            text=True
+        ).strip()
+    except subprocess.CalledProcessError:
+        return "unknown"
+
 def cmd_next(console: Console):
     """Show the top issue."""
     issues = load_mission()
@@ -112,6 +124,10 @@ def cmd_done(console: Console, slug: Optional[str] = None):
         console.print(f"[red]Issue file not found for slug: {target_issue.slug}[/red]")
         sys.exit(1)
 
+    # Get git commit hash
+    commit_hash = get_git_commit()
+
+    # Move to completed/{year}/
     year = datetime.now().year
     completed_dir = ISSUES_ROOT / "completed" / str(year)
     completed_dir.mkdir(parents=True, exist_ok=True)
@@ -119,7 +135,20 @@ def cmd_done(console: Console, slug: Optional[str] = None):
     dest_path = completed_dir / f"{target_issue.slug}.md"
     
     console.print(f"[green]Moving {issue_file} to {dest_path}...[/green]")
-    issue_file.rename(dest_path)
+    
+    # Read, append commit hash, and write to destination
+    with issue_file.open("r", encoding="utf-8") as f:
+        content = f.read()
+    
+    if not content.endswith("\n"):
+        content += "\n"
+    content += f"\n---\n**Completed in commit:** `{commit_hash}`\n"
+    
+    with dest_path.open("w", encoding="utf-8") as f:
+        f.write(content)
+        
+    # Remove original file
+    issue_file.unlink()
 
     new_issues = [i for i in issues if i.slug != target_issue.slug]
     save_mission(new_issues)
@@ -199,6 +228,35 @@ def cmd_list(console: Console):
 
     console.print(table)
 
+def cmd_version(console: Console, promote: Optional[str] = None):
+    """Show version or promote it."""
+    try:
+        if promote:
+            # Validate promote part
+            if promote not in ["major", "minor", "patch"]:
+                console.print(f"[red]Invalid version part: {promote}. Use major, minor, or patch.[/red]")
+                return
+            
+            console.print(f"[blue]Promoting {promote} version...[/blue]")
+            # Use bump-my-version
+            subprocess.run(["uv", "run", "bump-my-version", "bump", promote], check=True)
+            
+            # Read new version
+            with open("pyproject.toml", "r") as f:
+                content = f.read()
+                new_v = re.search(r'version = "(.*?)"', content).group(1)
+            console.print(f"[bold green]Promoted to version {new_v}[/bold green]")
+        else:
+            # Just show current version
+            with open("pyproject.toml", "r") as f:
+                content = f.read()
+                v = re.search(r'version = "(.*?)"', content).group(1)
+            console.print(f"[bold blue]Current Version:[/bold blue] [cyan]{v}[/cyan]")
+            console.print("\nTo promote version use: [bold]ta version promote [major|minor|patch][/bold]")
+
+    except Exception as e:
+        console.print(f"[red]Error managing version: {e}[/red]")
+
 def main():
     parser = argparse.ArgumentParser(description="Task Agent CLI")
     subparsers = parser.add_subparsers(dest="command")
@@ -219,6 +277,12 @@ def main():
     new_parser.add_argument("-b", "--body", default="", help="Body of the issue")
     new_parser.add_argument("-d", "--draft", action="store_true", help="Create as a draft")
 
+    # version
+    version_parser = subparsers.add_parser("version", help="Show or promote version")
+    version_subparsers = version_parser.add_subparsers(dest="version_command")
+    promote_parser = version_subparsers.add_parser("promote", help="Promote semantic version")
+    promote_parser.add_argument("part", choices=["major", "minor", "patch"], help="Part of the version to promote")
+
     args = parser.parse_args()
     console = Console()
 
@@ -230,6 +294,11 @@ def main():
         cmd_done(console, args.slug)
     elif args.command == "new":
         cmd_new(console, args.title, args.body, args.draft)
+    elif args.command == "version":
+        if args.version_command == "promote":
+            cmd_version(console, args.part)
+        else:
+            cmd_version(console)
     else:
         parser.print_help()
 
