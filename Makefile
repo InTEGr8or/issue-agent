@@ -11,4 +11,7 @@ help: ## Display this help screen
 test: ## Run unit tests
 
 next: ## Display the top issue from the queue
-	@uv run python -m issue_agent.cli
+	@uv run python -m issue_agent next
+
+done: ## Mark an issue as done (usage: make done [SLUG=slug])
+	@uv run python -m issue_agent done $(SLUG)
