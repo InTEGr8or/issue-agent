@@ -108,12 +108,14 @@ def cmd_done(console: Console, slug: Optional[str] = None):
         return
 
     if slug is None:
-        target_issue = issues[0]
+        target_issue: Optional[Issue] = issues[0] if issues else None
     else:
         target_issue = next((i for i in issues if i.slug == slug), None)
-        if not target_issue:
+
+    if not target_issue:
+        if slug:
             console.print(f"[red]Issue with slug '{slug}' not found in mission.usv[/red]")
-            sys.exit(1)
+        sys.exit(1)
 
     issue_file = find_issue_file(target_issue.slug)
     if not issue_file:
