@@ -8,10 +8,14 @@
       "delimiter": "\u001f",
       "schema": {
         "fields": [
-          { "name": "slug", "type": "string" },
-          { "name": "priority", "type": "integer" },
-          { "name": "status", "type": "string" },
-          { "name": "dependencies", "type": "string" }
+          {
+            "name": "slug",
+            "type": "string"
+          },
+          {
+            "name": "dependencies",
+            "type": "string"
+          }
         ]
       }
     }

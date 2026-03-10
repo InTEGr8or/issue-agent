@@ -36,44 +36,6 @@ def slugify(text: str) -> str:
     return text.strip("-")
 
 
-def load_mission(mission_path: Path) -> List[Issue]:
-    if not mission_path.exists():
-        return []
-
-    issues = []
-    with mission_path.open("r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            parts = line.split(USV_DELIM)
-            if len(parts) >= 3:
-                try:
-                    deps = []
-                    if len(parts) >= 4 and parts[3]:
-                        deps = [d.strip() for d in parts[3].split(",") if d.strip()]
-
-                    issues.append(
-                        Issue(
-                            slug=parts[0],
-                            priority=int(parts[1]),
-                            status=parts[2],
-                            dependencies=deps,
-                        )
-                    )
-                except (ValueError, IndexError):
-                    continue
-    return issues
-
-
-def save_mission(mission_path: Path, issues: List[Issue]):
-    """Save the list of issues back to mission.usv."""
-    mission_path.parent.mkdir(parents=True, exist_ok=True)
-    with mission_path.open("w", encoding="utf-8", newline="\n") as f:
-        for issue in issues:
-            f.write(issue.to_usv() + "\n")
-
-
 def find_issue_file(issues_root: Path, slug: str) -> Optional[Path]:
     """Find the issue markdown file by slug in issues_root excluding completed/."""
     if not issues_root.exists():
@@ -89,6 +51,46 @@ def find_issue_file(issues_root: Path, slug: str) -> Optional[Path]:
             return issue_file
 
     return None
+
+
+def load_mission(issues_root: Path, mission_path: Path) -> List[Issue]:
+    if not mission_path.exists():
+        return []
+
+    issues = []
+    with mission_path.open("r", encoding="utf-8") as f:
+        for i, line in enumerate(f, 1):
+            line = line.strip()
+            if not line:
+                continue
+            parts = line.split(USV_DELIM)
+            if len(parts) >= 1:
+                try:
+                    slug = parts[0]
+                    deps = []
+                    if len(parts) >= 2 and parts[1]:
+                        deps = [d.strip() for d in parts[1].split(",") if d.strip()]
+
+                    # Determine status from file location
+                    issue_file = find_issue_file(issues_root, slug)
+                    status = "unknown"
+                    if issue_file:
+                        status = issue_file.parent.name
+
+                    issues.append(
+                        Issue(slug=slug, dependencies=deps, priority=i, status=status)
+                    )
+                except (ValueError, IndexError):
+                    continue
+    return issues
+
+
+def save_mission(mission_path: Path, issues: List[Issue]):
+    """Save the list of issues back to mission.usv."""
+    mission_path.parent.mkdir(parents=True, exist_ok=True)
+    with mission_path.open("w", encoding="utf-8", newline="\n") as f:
+        for issue in issues:
+            f.write(issue.to_usv() + "\n")
 
 
 def get_git_commit() -> str:
@@ -115,7 +117,7 @@ def get_current_version() -> str:
 
 def cmd_next(console: Console, issues_root: Path, mission_path: Path):
     """Show the top issue."""
-    issues = load_mission(mission_path)
+    issues = load_mission(issues_root, mission_path)
     if not issues:
         console.print(f"[yellow]No issues found in {mission_path}[/yellow]")
         return
@@ -154,7 +156,7 @@ def cmd_done(
     console: Console, issues_root: Path, mission_path: Path, slug: Optional[str] = None
 ):
     """Mark an issue as done."""
-    issues = load_mission(mission_path)
+    issues = load_mission(issues_root, mission_path)
     if not issues:
         console.print(f"[yellow]No issues found in {mission_path}[/yellow]")
         return
@@ -242,13 +244,10 @@ def cmd_new(
         f.write(f"{body}\n")
 
     # Update mission.usv
-    issues = load_mission(mission_path)
-
-    max_priority = max([i.priority for i in issues], default=0)
-    new_priority = max_priority + 1
+    issues = load_mission(issues_root, mission_path)
 
     new_issue = Issue(
-        slug=slug, priority=new_priority, status=status, dependencies=deps
+        slug=slug, dependencies=deps, status=status, priority=len(issues) + 1
     )
 
     issues.append(new_issue)
@@ -256,19 +255,16 @@ def cmd_new(
 
     console.print(f"[bold green]Created new issue: {slug}[/bold green]")
     console.print(f"File: {issue_file}")
-    console.print(f"Priority: {new_priority}")
     if deps:
         console.print(f"Depends on: {', '.join(deps)}")
 
 
 def cmd_list(console: Console, issues_root: Path, mission_path: Path):
-    """List all issues in mission.usv, sorted by status (pending first) then priority."""
-    issues = load_mission(mission_path)
+    """List all issues in mission.usv."""
+    issues = load_mission(issues_root, mission_path)
     if not issues:
         console.print(f"[yellow]No issues found in {mission_path}[/yellow]")
         return
-
-    sorted_issues = sorted(issues, key=lambda x: (x.status != "pending", x.priority))
 
     table = Table(title="Task Queue")
     table.add_column("Priority", justify="right", style="cyan")
@@ -277,7 +273,7 @@ def cmd_list(console: Console, issues_root: Path, mission_path: Path):
     table.add_column("Depends On", style="yellow")
     table.add_column("Location", style="dim")
 
-    for issue in sorted_issues:
+    for issue in issues:
         issue_file = find_issue_file(issues_root, issue.slug)
         location = str(issue_file) if issue_file else "[red]MISSING[/red]"
 
@@ -309,7 +305,6 @@ def cmd_ingest(console: Console, issues_root: Path, mission_path: Path):
         return
 
     issues = []
-    priority = 1
 
     # Status directories to scan
     for status in ["pending", "draft", "active"]:
@@ -324,15 +319,11 @@ def cmd_ingest(console: Console, issues_root: Path, mission_path: Path):
             deps = []
             with issue_file.open("r", encoding="utf-8") as f:
                 content = f.read()
-                # Look for **Depends on:** task-a, task-b
                 match = re.search(r"\*\*Depends on:\*\*\s*(.*)", content)
                 if match:
                     deps = [d.strip() for d in match.group(1).split(",") if d.strip()]
 
-            issues.append(
-                Issue(slug=slug, priority=priority, status=status, dependencies=deps)
-            )
-            priority += 1
+            issues.append(Issue(slug=slug, dependencies=deps, status=status))
 
     # Save mission.usv
     save_mission(mission_path, issues)
@@ -352,8 +343,6 @@ def cmd_ingest(console: Console, issues_root: Path, mission_path: Path):
                 "schema": {
                     "fields": [
                         {"name": "slug", "type": "string"},
-                        {"name": "priority", "type": "integer"},
-                        {"name": "status", "type": "string"},
                         {"name": "dependencies", "type": "string"},
                     ]
                 },
