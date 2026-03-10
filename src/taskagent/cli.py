@@ -73,6 +73,16 @@ def get_git_commit() -> str:
     except subprocess.CalledProcessError:
         return "unknown"
 
+def get_current_version() -> str:
+    """Read the current version from pyproject.toml."""
+    try:
+        with open("pyproject.toml", "r") as f:
+            content = f.read()
+            match = re.search(r'version = "(.*?)"', content)
+            return match.group(1) if match else "unknown"
+    except Exception:
+        return "unknown"
+
 def cmd_next(console: Console):
     """Show the top issue."""
     issues = load_mission()
@@ -154,6 +164,16 @@ def cmd_done(console: Console, slug: Optional[str] = None):
     save_mission(new_issues)
     console.print(f"[bold green]Issue '{target_issue.slug}' marked as done and removed from mission.usv[/bold green]")
 
+    # Auto-promote patch version
+    console.print("[blue]Auto-promoting patch version...[/blue]")
+    try:
+        # We need to make sure the repo is clean for bump-my-version if it's configured to commit
+        # But here we just want it to update the file. 
+        # Actually, we should probably just use the cmd_version logic.
+        cmd_version(console, promote="patch")
+    except Exception as e:
+        console.print(f"[yellow]Warning: Could not auto-promote version: {e}[/yellow]")
+
 def cmd_new(console: Console, title: str, body: str, draft: bool):
     """Create a new issue."""
     slug = slugify(title)
@@ -228,9 +248,17 @@ def cmd_list(console: Console):
 
     console.print(table)
 
-def cmd_version(console: Console, promote: Optional[str] = None):
-    """Show version or promote it."""
+def cmd_version(console: Console, promote: Optional[str] = None, tag: bool = False):
+    """Show version, promote it, or tag it."""
     try:
+        if tag:
+            v = get_current_version()
+            tag_name = f"v{v}"
+            console.print(f"[blue]Tagging current commit as {tag_name}...[/blue]")
+            subprocess.run(["git", "tag", tag_name], check=True)
+            console.print(f"[bold green]Tagged commit as {tag_name}[/bold green]")
+            return
+
         if promote:
             # Validate promote part
             if promote not in ["major", "minor", "patch"]:
@@ -239,20 +267,18 @@ def cmd_version(console: Console, promote: Optional[str] = None):
             
             console.print(f"[blue]Promoting {promote} version...[/blue]")
             # Use bump-my-version
-            subprocess.run(["uv", "run", "bump-my-version", "bump", promote], check=True)
+            # Note: bump-my-version might fail if there are uncommitted changes.
+            # We use --no-commit --no-tag to just update the file.
+            subprocess.run(["uv", "run", "bump-my-version", "bump", promote, "--no-commit", "--no-tag"], check=True)
             
-            # Read new version
-            with open("pyproject.toml", "r") as f:
-                content = f.read()
-                new_v = re.search(r'version = "(.*?)"', content).group(1)
+            new_v = get_current_version()
             console.print(f"[bold green]Promoted to version {new_v}[/bold green]")
         else:
-            # Just show current version
-            with open("pyproject.toml", "r") as f:
-                content = f.read()
-                v = re.search(r'version = "(.*?)"', content).group(1)
+            v = get_current_version()
             console.print(f"[bold blue]Current Version:[/bold blue] [cyan]{v}[/cyan]")
-            console.print("\nTo promote version use: [bold]ta version promote [major|minor|patch][/bold]")
+            console.print("\nSubcommands:")
+            console.print("  [bold]ta version promote [major|minor|patch][/bold]")
+            console.print("  [bold]ta version tag[/bold]")
 
     except Exception as e:
         console.print(f"[red]Error managing version: {e}[/red]")
@@ -282,6 +308,7 @@ def main():
     version_subparsers = version_parser.add_subparsers(dest="version_command")
     promote_parser = version_subparsers.add_parser("promote", help="Promote semantic version")
     promote_parser.add_argument("part", choices=["major", "minor", "patch"], help="Part of the version to promote")
+    version_subparsers.add_parser("tag", help="Tag current commit with current version")
 
     args = parser.parse_args()
     console = Console()
@@ -297,6 +324,8 @@ def main():
     elif args.command == "version":
         if args.version_command == "promote":
             cmd_version(console, args.part)
+        elif args.version_command == "tag":
+            cmd_version(console, tag=True)
         else:
             cmd_version(console)
     else:

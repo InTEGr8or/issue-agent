@@ -457,7 +457,7 @@ wheels = [
 
 [[package]]
 name = "taskagent"
-version = "0.1.1"
+version = "0.1.2"
 source = { editable = "." }
 dependencies = [
     { name = "pydantic" },
@@ -479,7 +479,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "bump-my-version", specifier = ">=0.30.1" },
+    { name = "bump-my-version", specifier = "==1.2.7" },
     { name = "mypy", specifier = ">=1.15.0" },
     { name = "ruff", specifier = ">=0.9.7" },
 ]
