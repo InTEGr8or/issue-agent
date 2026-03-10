@@ -1,9 +1,10 @@
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from pathlib import Path
 from pydantic import BaseModel
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
+from rich.table import Table
 import sys
 import argparse
 from datetime import datetime
@@ -172,12 +173,56 @@ def cmd_new(console: Console, title: str, body: str, draft: bool):
     console.print(f"File: {issue_file}")
     console.print(f"Priority: {new_priority}")
 
+def cmd_list(console: Console):
+    """List all issues in mission.usv, sorted by status (pending first) then priority."""
+    issues = load_mission()
+    if not issues:
+        console.print("[yellow]No issues found in mission.usv[/yellow]")
+        return
+
+    # Sort: pending first, then by priority
+    # status == "pending" will be False (0) or True (1), so we sort by status != "pending"
+    sorted_issues = sorted(issues, key=lambda x: (x.status != "pending", x.priority))
+
+    table = Table(title="Task Queue")
+    table.add_column("Priority", justify="right", style="cyan")
+    table.add_column("Status", style="magenta")
+    table.add_column("Slug", style="green")
+    table.add_column("Branch", style="blue")
+    table.add_column("Location", style="dim")
+
+    for issue in sorted_issues:
+        issue_file = find_issue_file(issue.slug)
+        location = str(issue_file) if issue_file else "[red]MISSING[/red]"
+        
+        # Color code status
+        status_str = issue.status
+        if status_str == "pending":
+            status_str = f"[bold yellow]{status_str}[/bold yellow]"
+        elif status_str == "draft":
+            status_str = f"[dim]{status_str}[/dim]"
+        elif status_str == "active":
+            status_str = f"[bold green]{status_str}[/bold green]"
+
+        table.add_row(
+            str(issue.priority),
+            status_str,
+            issue.slug,
+            issue.branch,
+            location
+        )
+
+    console.print(table)
+
 def main():
     parser = argparse.ArgumentParser(description="Task Agent CLI")
     subparsers = parser.add_subparsers(dest="command")
 
     # next
     subparsers.add_parser("next", help="Show the top issue")
+    
+    # list
+    subparsers.add_parser("list", help="List all issues")
     
     # done
     done_parser = subparsers.add_parser("done", help="Mark an issue as done")
@@ -194,6 +239,8 @@ def main():
 
     if args.command == "next":
         cmd_next(console)
+    elif args.command == "list":
+        cmd_list(console)
     elif args.command == "done":
         cmd_done(console, args.slug)
     elif args.command == "new":

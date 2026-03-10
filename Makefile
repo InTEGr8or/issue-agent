@@ -13,5 +13,8 @@ test: ## Run unit tests
 next: ## Display the top issue from the queue
 	@uv run python -m taskagent next
 
+list: ## List all issues in the queue
+	@uv run python -m taskagent list
+
 done: ## Mark an issue as done (usage: make done [SLUG=slug])
 	@uv run python -m taskagent done $(SLUG)
