@@ -199,10 +199,7 @@ def main():
     elif args.command == "new":
         cmd_new(console, args.title, args.body, args.draft)
     else:
-        if len(sys.argv) == 1:
-            cmd_next(console)
-        else:
-            parser.print_help()
+        parser.print_help()
 
 if __name__ == "__main__":
     main()
