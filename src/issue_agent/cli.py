@@ -7,6 +7,7 @@ from rich.panel import Panel
 import sys
 import argparse
 from datetime import datetime
+import re
 
 # Constants
 USV_DELIM = '\x1f'
@@ -21,6 +22,13 @@ class Issue(BaseModel):
 
     def to_usv(self) -> str:
         return f"{self.slug}{USV_DELIM}{self.priority}{USV_DELIM}{self.status}{USV_DELIM}{self.branch}"
+
+def slugify(text: str) -> str:
+    """Convert text to a slug."""
+    text = text.lower()
+    text = re.sub(r'[^\w\s-]', '', text)
+    text = re.sub(r'[\s_-]+', '-', text)
+    return text.strip('-')
 
 def load_mission() -> List[Issue]:
     if not MISSION_PATH.exists():
@@ -53,12 +61,9 @@ def save_mission(issues: List[Issue]):
 
 def find_issue_file(slug: str) -> Optional[Path]:
     """Find the issue markdown file by slug in docs/issues/ excluding completed/."""
-    # We check subdirectories like pending/, draft/, active/
-    # but explicitly skip completed/
     search_dirs = [d for d in ISSUES_ROOT.iterdir() if d.is_dir() and d.name != "completed"]
     
     for directory in search_dirs:
-        # Check if the file exists in this directory
         issue_file = directory / f"{slug}.md"
         if issue_file.exists():
             return issue_file
@@ -102,11 +107,9 @@ def cmd_done(console: Console, slug: Optional[str] = None):
         console.print("[yellow]No issues found in mission.usv[/yellow]")
         return
 
-    # If no slug provided, use the top one
     if slug is None:
         target_issue = issues[0]
     else:
-        # Find the issue with the given slug
         target_issue = next((i for i in issues if i.slug == slug), None)
         if not target_issue:
             console.print(f"[red]Issue with slug '{slug}' not found in mission.usv[/red]")
@@ -115,11 +118,8 @@ def cmd_done(console: Console, slug: Optional[str] = None):
     issue_file = find_issue_file(target_issue.slug)
     if not issue_file:
         console.print(f"[red]Issue file not found for slug: {target_issue.slug}[/red]")
-        # We might still want to remove it from mission.usv if requested?
-        # For now, let's just exit.
         sys.exit(1)
 
-    # Move to completed/{year}/
     year = datetime.now().year
     completed_dir = ISSUES_ROOT / "completed" / str(year)
     completed_dir.mkdir(parents=True, exist_ok=True)
@@ -129,10 +129,46 @@ def cmd_done(console: Console, slug: Optional[str] = None):
     console.print(f"[green]Moving {issue_file} to {dest_path}...[/green]")
     issue_file.rename(dest_path)
 
-    # Remove from mission.usv
     new_issues = [i for i in issues if i.slug != target_issue.slug]
     save_mission(new_issues)
     console.print(f"[bold green]Issue '{target_issue.slug}' marked as done and removed from mission.usv[/bold green]")
+
+def cmd_new(console: Console, title: str, body: str, draft: bool):
+    """Create a new issue."""
+    slug = slugify(title)
+    status = "draft" if draft else "pending"
+    target_dir = ISSUES_ROOT / status
+    target_dir.mkdir(parents=True, exist_ok=True)
+    
+    issue_file = target_dir / f"{slug}.md"
+    if issue_file.exists():
+        console.print(f"[red]Error: Issue file already exists: {issue_file}[/red]")
+        sys.exit(1)
+        
+    # Write the markdown file
+    with issue_file.open("w", encoding="utf-8") as f:
+        f.write(f"# {title}\n\n{body}\n")
+    
+    # Update mission.usv
+    issues = load_mission()
+    
+    # Determine priority: max + 1
+    max_priority = max([i.priority for i in issues], default=0)
+    new_priority = max_priority + 1
+    
+    new_issue = Issue(
+        slug=slug,
+        priority=new_priority,
+        status=status,
+        branch=f"task/{slug}"
+    )
+    
+    issues.append(new_issue)
+    save_mission(issues)
+    
+    console.print(f"[bold green]Created new issue: {slug}[/bold green]")
+    console.print(f"File: {issue_file}")
+    console.print(f"Priority: {new_priority}")
 
 def main():
     parser = argparse.ArgumentParser(description="Issue Agent CLI")
@@ -145,6 +181,12 @@ def main():
     done_parser = subparsers.add_parser("done", help="Mark an issue as done")
     done_parser.add_argument("slug", nargs="?", help="Slug of the issue to mark as done (defaults to top issue)")
 
+    # new
+    new_parser = subparsers.add_parser("new", help="Create a new issue")
+    new_parser.add_argument("-t", "--title", required=True, help="Title of the issue")
+    new_parser.add_argument("-b", "--body", default="", help="Body of the issue")
+    new_parser.add_argument("-d", "--draft", action="store_true", help="Create as a draft")
+
     args = parser.parse_args()
     console = Console()
 
@@ -152,8 +194,9 @@ def main():
         cmd_next(console)
     elif args.command == "done":
         cmd_done(console, args.slug)
+    elif args.command == "new":
+        cmd_new(console, args.title, args.body, args.draft)
     else:
-        # Default to 'next' if no command given? Or show help.
         if len(sys.argv) == 1:
             cmd_next(console)
         else:
