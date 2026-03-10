@@ -9,6 +9,12 @@ help: ## Display this help screen
 # ==============================================================================
 
 test: ## Run unit tests
+	@uv run pytest
+
+lint: ## Run linting and type checks
+	@uv run ruff check .
+	@uv run ruff format --check .
+	@uv run mypy src
 
 next: ## Display the top issue from the queue
 	@uv run python -m taskagent next
