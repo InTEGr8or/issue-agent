@@ -1,9 +1,13 @@
 [project]
 name = "taskagent"
-version = "0.1.2"
+version = "0.1.5"
 description = "A prioritized, file-based task queue for autonomous agentic workers"
 readme = "README.md"
 requires-python = ">=3.12"
+authors = [
+    { name = "Mark Stouffer", email = "1802850+InTEGr8or@users.noreply.github.com" }
+]
+license = { text = "MIT" }
 dependencies = [
     "pydantic>=2.10.6",
     "rich>=13.9.4",
@@ -24,7 +28,7 @@ dev = [
 ]
 
 [tool.bumpversion]
-current_version = "0.1.2"
+current_version = "0.1.5"
 parse = "(?P<major>\\d+)\\.(?P<minor>\\d+)\\.(?P<patch>\\d+)"
 serialize = ["{major}.{minor}.{patch}"]
 search = "version = \"{current_version}\""
