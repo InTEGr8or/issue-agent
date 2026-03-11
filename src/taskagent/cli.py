@@ -14,6 +14,7 @@ import json
 import importlib.metadata
 import shutil
 import questionary
+import urllib.request
 
 from taskagent.models.issue import Issue, USV_DELIM
 
@@ -132,6 +133,17 @@ def get_tool_version() -> str:
         return importlib.metadata.version("task-agent")
     except Exception:
         return "unknown"
+
+
+def get_latest_pypi_version(timeout: int = 4) -> Optional[str]:
+    """Fetch the latest version of task-agent from PyPI."""
+    url = "https://pypi.org/pypi/task-agent/json"
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as response:
+            data = json.load(response)
+            return data["info"]["version"]
+    except Exception:
+        return None
 
 
 def get_project_version() -> Tuple[str, Optional[str]]:
@@ -722,7 +734,16 @@ def main():
     console = Console()
 
     if args.version:
-        console.print(f"task-agent version {get_tool_version()}")
+        current_v = get_tool_version()
+        console.print(f"task-agent version {current_v}")
+        latest_v = get_latest_pypi_version()
+        if latest_v and latest_v != current_v:
+            console.print(
+                f"[yellow]A newer version ({latest_v}) is available.[/yellow]"
+            )
+            console.print("Run [bold]ta self-up[/bold] to upgrade.")
+        elif latest_v:
+            console.print("[green]You are on the latest version.[/green]")
         return
 
     issues_root, mission_path = get_config_paths(args.config_dir)
