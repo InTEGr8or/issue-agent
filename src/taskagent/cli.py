@@ -115,6 +115,26 @@ def save_mission(mission_path: Path, issues: List[Issue]):
             f.write(issue.to_usv() + "\n")
 
 
+def sync_mission(issues_root: Path, mission_path: Path) -> List[Issue]:
+    """Load, sort by status groups, and save back."""
+    issues = load_mission(issues_root, mission_path)
+    if not issues:
+        return []
+
+    # Sort: active -> pending -> draft -> unknown/others
+    status_order = {"active": 0, "pending": 1, "draft": 2}
+    sorted_issues = sorted(
+        issues, key=lambda x: (status_order.get(x.status, 99), x.priority)
+    )
+
+    # Re-assign priority based on new order
+    for i, issue in enumerate(sorted_issues, 1):
+        issue.priority = i
+
+    save_mission(mission_path, sorted_issues)
+    return sorted_issues
+
+
 def get_git_commit() -> str:
     """Get the short git commit hash."""
     try:
@@ -190,8 +210,7 @@ def select_issue(
     if not filtered:
         return None
 
-    # If no slug_part provided, and we only want one, maybe return top one?
-    # For 'done' or 'active', if no slug given, we often default to top.
+    # If no slug_part provided, return top one
     if slug_part is None:
         return filtered[0]
 
@@ -219,7 +238,7 @@ def select_issue(
 
 def cmd_next(console: Console, issues_root: Path, mission_path: Path):
     """Show the top issue."""
-    issues = load_mission(issues_root, mission_path)
+    issues = sync_mission(issues_root, mission_path)
     if not issues:
         console.print(f"[yellow]No issues found in {mission_path}[/yellow]")
         return
@@ -319,7 +338,6 @@ def cmd_done(
         f"[bold green]Issue '{target_issue.slug}' marked as done and removed from mission.usv[/bold green]"
     )
 
-    # Auto-promote patch version if we are in a repo that supports it
     ver, source = get_project_version()
     if source == "pyproject.toml" and Path("pyproject.toml").exists():
         console.print("[blue]Auto-promoting project patch version...[/blue]")
@@ -405,7 +423,7 @@ def cmd_list(
     output_format: str = "table",
 ):
     """List all issues in mission.usv."""
-    issues = load_mission(issues_root, mission_path)
+    issues = sync_mission(issues_root, mission_path)
     if not issues:
         if output_format == "json":
             print("[]")
@@ -413,17 +431,10 @@ def cmd_list(
             console.print(f"[yellow]No issues found in {mission_path}[/yellow]")
         return
 
-    # Sort: pending -> draft -> active -> unknown/others
-    status_order = {"active": 0, "pending": 1, "draft": 2}
-    # We use a high value for unknown statuses to put them at the end
-    sorted_issues = sorted(
-        issues, key=lambda x: (status_order.get(x.status, 99), x.priority)
-    )
-
     if output_format == "json":
         # Convert issues to list of dicts
         data = []
-        for i in sorted_issues:
+        for i in issues:
             issue_file = find_issue_file(issues_root, i.slug)
             location = str(issue_file) if issue_file else None
             data.append(
@@ -440,7 +451,7 @@ def cmd_list(
 
     if output_format == "text":
         # No borders, simple columns
-        for i in sorted_issues:
+        for i in issues:
             issue_file = find_issue_file(issues_root, i.slug)
             location = str(issue_file) if issue_file else "MISSING"
             deps = ",".join(i.dependencies)
@@ -457,7 +468,7 @@ def cmd_list(
     table.add_column("Depends On", style="yellow")
     table.add_column("Location", style="dim")
 
-    for issue in sorted_issues:
+    for issue in issues:
         issue_file = find_issue_file(issues_root, issue.slug)
         location = str(issue_file) if issue_file else "[red]MISSING[/red]"
 
@@ -517,8 +528,10 @@ def cmd_ingest(console: Console, issues_root: Path, mission_path: Path):
     # 4. Combine: Existing ordered items + newly found items at the end
     final_issues = present_issues + new_issues
 
-    # 5. Save mission.usv
+    # 5. Sync/Sort and save
     save_mission(mission_path, final_issues)
+    sync_mission(issues_root, mission_path)
+
     console.print(
         f"[bold green]Ingested {len(new_issues)} new issues, removed {len(existing_issues) - len(present_issues)} missing ones.[/bold green]"
     )
@@ -574,6 +587,7 @@ def cmd_promote(
     console.print(
         f"[bold green]Issue '{target.slug}' promoted to pending.[/bold green]"
     )
+    sync_mission(issues_root, mission_path)
 
 
 def cmd_active(
@@ -610,6 +624,51 @@ def cmd_active(
     console.print(f"[green]Marking {target.slug} as active...[/green]")
     shutil.move(str(source), str(dest))
     console.print(f"[bold green]Issue '{target.slug}' is now active.[/bold green]")
+    sync_mission(issues_root, mission_path)
+
+
+def cmd_prioritize(
+    console: Console,
+    issues_root: Path,
+    mission_path: Path,
+    slug_part: str,
+    direction: str,
+):
+    """Move an issue up or down in priority."""
+    issues = load_mission(issues_root, mission_path)
+    target = select_issue(console, issues, slug_part)
+
+    if not target:
+        console.print(f"[red]No issue found matching '{slug_part}'.[/red]")
+        return
+
+    # Find index
+    idx = -1
+    for i, issue in enumerate(issues):
+        if issue.slug == target.slug:
+            idx = i
+            break
+
+    if idx == -1:
+        return
+
+    if direction == "up":
+        if idx == 0:
+            console.print("[yellow]Issue is already at the top.[/yellow]")
+            return
+        # Swap
+        issues[idx], issues[idx - 1] = issues[idx - 1], issues[idx]
+    else:
+        if idx == len(issues) - 1:
+            console.print("[yellow]Issue is already at the bottom.[/yellow]")
+            return
+        # Swap
+        issues[idx], issues[idx + 1] = issues[idx + 1], issues[idx]
+
+    save_mission(mission_path, issues)
+    console.print(f"[bold green]Moved '{target.slug}' {direction}.[/bold green]")
+    # Resort by status groups while maintaining relative order
+    sync_mission(issues_root, mission_path)
 
 
 def cmd_self_up(console: Console):
@@ -748,6 +807,14 @@ def main():
     # self-up
     subparsers.add_parser("self-up", help="Upgrade task-agent tool")
 
+    # up
+    up_parser = subparsers.add_parser("up", help="Move an issue up in priority")
+    up_parser.add_argument("slug", help="Slug (or partial slug) of the issue")
+
+    # down
+    down_parser = subparsers.add_parser("down", help="Move an issue down in priority")
+    down_parser.add_argument("slug", help="Slug (or partial slug) of the issue")
+
     # promote
     promote_parser = subparsers.add_parser(
         "promote", help="Promote a draft issue to pending"
@@ -834,6 +901,10 @@ def main():
         cmd_ingest(console, issues_root, mission_path)
     elif args.command == "self-up":
         cmd_self_up(console)
+    elif args.command == "up":
+        cmd_prioritize(console, issues_root, mission_path, args.slug, "up")
+    elif args.command == "down":
+        cmd_prioritize(console, issues_root, mission_path, args.slug, "down")
     elif args.command == "promote":
         cmd_promote(console, issues_root, mission_path, args.slug)
     elif args.command == "active":
