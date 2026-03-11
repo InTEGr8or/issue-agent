@@ -259,6 +259,8 @@ def cmd_done(
     issues_root: Path,
     mission_path: Path,
     slug_part: Optional[str] = None,
+    commit_message: Optional[str] = None,
+    should_commit: bool = False,
 ):
     """Mark an issue as done."""
     issues = load_mission(issues_root, mission_path)
@@ -317,6 +319,7 @@ def cmd_done(
         f"[bold green]Issue '{target_issue.slug}' marked as done and removed from mission.usv[/bold green]"
     )
 
+    # Auto-promote patch version if we are in a repo that supports it
     ver, source = get_project_version()
     if source == "pyproject.toml" and Path("pyproject.toml").exists():
         console.print("[blue]Auto-promoting project patch version...[/blue]")
@@ -326,6 +329,19 @@ def cmd_done(
             console.print(
                 f"[yellow]Warning: Could not auto-promote version: {e}[/yellow]"
             )
+
+    # Git commit logic
+    if should_commit:
+        if not commit_message:
+            commit_message = f"feat: complete {target_issue.slug}"
+
+        console.print(f"[blue]Committing changes with message: {commit_message}[/blue]")
+        try:
+            subprocess.run(["git", "add", "."], check=True)
+            subprocess.run(["git", "commit", "-m", commit_message], check=True)
+            console.print("[bold green]Successfully committed changes.[/bold green]")
+        except subprocess.CalledProcessError as e:
+            console.print(f"[red]Error committing changes: {e}[/red]")
 
 
 def cmd_new(
@@ -700,6 +716,12 @@ def main():
     done_parser.add_argument(
         "slug", nargs="?", help="Slug (or partial slug) of the issue"
     )
+    done_parser.add_argument("-m", "--message", help="Commit message")
+    done_parser.add_argument(
+        "--commit",
+        action="store_true",
+        help="Commit changes even if no message is provided",
+    )
 
     # new
     new_parser = subparsers.add_parser("new", help="Create a new issue")
@@ -761,7 +783,14 @@ def main():
     elif args.command == "active":
         cmd_active(console, issues_root, mission_path, args.slug)
     elif args.command == "done":
-        cmd_done(console, issues_root, mission_path, args.slug)
+        cmd_done(
+            console,
+            issues_root,
+            mission_path,
+            args.slug,
+            commit_message=args.message,
+            should_commit=args.commit or args.message is not None,
+        )
     elif args.command == "new":
         cmd_new(
             console,
