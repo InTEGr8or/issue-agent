@@ -257,20 +257,21 @@ def cmd_next(console: Console, issues_root: Path, mission_path: Path):
     if next_issue.dependencies:
         deps_info = f"[bold blue]DEPENDS ON:[/bold blue] [yellow]{', '.join(next_issue.dependencies)}[/yellow]\n"
 
-    console.print(
-        Panel(
-            f"[bold blue]NEXT ISSUE:[/bold blue] [cyan]{next_issue.slug}[/cyan]\n"
-            f"[bold blue]PRIORITY:[/bold blue] {next_issue.priority} | "
-            f"[bold blue]STATUS:[/bold blue] {next_issue.status}\n"
-            f"{deps_info}"
-            f"[bold blue]FILE:[/bold blue] {issue_file}",
-            title="Task Agent",
-            expand=False,
+    with console.pager(styles=True):
+        console.print(
+            Panel(
+                f"[bold blue]NEXT ISSUE:[/bold blue] [cyan]{next_issue.slug}[/cyan]\n"
+                f"[bold blue]PRIORITY:[/bold blue] {next_issue.priority} | "
+                f"[bold blue]STATUS:[/bold blue] {next_issue.status}\n"
+                f"{deps_info}"
+                f"[bold blue]FILE:[/bold blue] {issue_file}",
+                title="Task Agent",
+                expand=False,
+            )
         )
-    )
 
-    md = Markdown(content)
-    console.print(md)
+        md = Markdown(content)
+        console.print(md)
 
 
 def cmd_done(
