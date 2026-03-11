@@ -408,7 +408,7 @@ def cmd_list(console: Console, issues_root: Path, mission_path: Path):
 
 
 def cmd_ingest(console: Console, issues_root: Path, mission_path: Path):
-    """Ingest existing markdown files into mission.usv."""
+    """Ingest existing markdown files into mission.usv: preserve order, add new, remove missing."""
     ensure_issues_dir(issues_root)
 
     # 1. Load existing issues (preserving order)
@@ -539,6 +539,16 @@ def cmd_active(
     console.print(f"[bold green]Issue '{target.slug}' is now active.[/bold green]")
 
 
+def cmd_self_up(console: Console):
+    """Upgrade task-agent tool."""
+    console.print("[blue]Upgrading task-agent via uv...[/blue]")
+    try:
+        subprocess.run(["uv", "tool", "upgrade", "task-agent"], check=True)
+        console.print("[bold green]Successfully upgraded task-agent.[/bold green]")
+    except subprocess.CalledProcessError as e:
+        console.print(f"[red]Error upgrading task-agent: {e}[/red]")
+
+
 def extract_deps(file_path: Path) -> List[str]:
     """Helper to extract dependencies from a markdown file."""
     try:
@@ -656,6 +666,9 @@ def main():
         "ingest", help="Ingest existing markdown files into mission.usv"
     )
 
+    # self-up
+    subparsers.add_parser("self-up", help="Upgrade task-agent tool")
+
     # promote
     promote_parser = subparsers.add_parser(
         "promote", help="Promote a draft issue to pending"
@@ -720,6 +733,8 @@ def main():
         cmd_list(console, issues_root, mission_path)
     elif args.command == "ingest":
         cmd_ingest(console, issues_root, mission_path)
+    elif args.command == "self-up":
+        cmd_self_up(console)
     elif args.command == "promote":
         cmd_promote(console, issues_root, mission_path, args.slug)
     elif args.command == "active":
