@@ -280,7 +280,7 @@ def cmd_done(
     mission_path: Path,
     slug_part: Optional[str] = None,
     commit_message: Optional[str] = None,
-    should_commit: bool = False,
+    should_commit: bool = True,
 ):
     """Mark an issue as done."""
     issues = load_mission(issues_root, mission_path)
@@ -302,36 +302,38 @@ def cmd_done(
         console.print(f"[red]Issue file not found for slug: {target_issue.slug}[/red]")
         sys.exit(1)
 
-    # Detect if directory-based
+    # 1. Prepare Move
     is_dir_based = issue_file.name == "README.md"
     source_to_move = issue_file.parent if is_dir_based else issue_file
 
-    commit_hash = get_git_commit()
     year = datetime.now().year
     completed_dir = issues_root / "completed" / str(year)
     completed_dir.mkdir(parents=True, exist_ok=True)
 
     dest_path = completed_dir / source_to_move.name
 
-    console.print(f"[green]Moving {source_to_move} to {dest_path}...[/green]")
-
+    # 2. Add placeholder
     with issue_file.open("r", encoding="utf-8") as f:
         content = f.read()
 
     if not content.endswith("\n"):
         content += "\n"
-    content += f"\n---\n**Completed in commit:** `{commit_hash}`\n"
+    content += "\n---\n**Completed in commit:** `<pending-commit-id>`\n"
 
+    # 3. Execute Move and USV update
+    console.print(f"[green]Moving {source_to_move} to {dest_path}...[/green]")
     if is_dir_based:
         if dest_path.exists():
             shutil.rmtree(dest_path)
         shutil.move(str(source_to_move), str(dest_path))
         with (dest_path / "README.md").open("w", encoding="utf-8") as f:
             f.write(content)
+        final_file = dest_path / "README.md"
     else:
         with dest_path.open("w", encoding="utf-8") as f:
             f.write(content)
         issue_file.unlink()
+        final_file = dest_path
 
     new_issues = [i for i in issues if i.slug != target_issue.slug]
     save_mission(mission_path, new_issues)
@@ -339,6 +341,43 @@ def cmd_done(
         f"[bold green]Issue '{target_issue.slug}' marked as done and removed from mission.usv[/bold green]"
     )
 
+    # 4. Commit
+    commit_hash = "unknown"
+    if should_commit:
+        if not commit_message:
+            commit_message = f"feat: complete {target_issue.slug}"
+
+        # We check status AFTER move and USV update
+        status = subprocess.run(
+            ["git", "status", "--porcelain"], capture_output=True, text=True
+        ).stdout.strip()
+
+        if status:
+            console.print(
+                f"[blue]Committing changes with message: {commit_message}[/blue]"
+            )
+            try:
+                subprocess.run(["git", "add", "."], check=True)
+                subprocess.run(["git", "commit", "-m", commit_message], check=True)
+                commit_hash = get_git_commit()
+                console.print(
+                    f"[bold green]Successfully committed work as {commit_hash}.[/bold green]"
+                )
+            except subprocess.CalledProcessError as e:
+                console.print(f"[red]Error committing changes: {e}[/red]")
+                commit_hash = get_git_commit()
+        else:
+            console.print("[yellow]No changes to commit.[/yellow]")
+            commit_hash = get_git_commit()
+    else:
+        commit_hash = get_git_commit()
+
+    # 5. Replace placeholder with real hash (leaves trailing diff)
+    file_text = final_file.read_text(encoding="utf-8")
+    file_text = file_text.replace("<pending-commit-id>", commit_hash)
+    final_file.write_text(file_text, encoding="utf-8")
+
+    # 6. Auto-promote patch version if we are in a repo that supports it
     ver, source = get_project_version()
     if source == "pyproject.toml" and Path("pyproject.toml").exists():
         console.print("[blue]Auto-promoting project patch version...[/blue]")
@@ -348,19 +387,6 @@ def cmd_done(
             console.print(
                 f"[yellow]Warning: Could not auto-promote version: {e}[/yellow]"
             )
-
-    # Git commit logic
-    if should_commit:
-        if not commit_message:
-            commit_message = f"feat: complete {target_issue.slug}"
-
-        console.print(f"[blue]Committing changes with message: {commit_message}[/blue]")
-        try:
-            subprocess.run(["git", "add", "."], check=True)
-            subprocess.run(["git", "commit", "-m", commit_message], check=True)
-            console.print("[bold green]Successfully committed changes.[/bold green]")
-        except subprocess.CalledProcessError as e:
-            console.print(f"[red]Error committing changes: {e}[/red]")
 
 
 def cmd_new(
@@ -837,9 +863,9 @@ def main():
     )
     done_parser.add_argument("-m", "--message", help="Commit message")
     done_parser.add_argument(
-        "--commit",
+        "--no-commit",
         action="store_true",
-        help="Commit changes even if no message is provided",
+        help="Do not commit changes",
     )
 
     # new
@@ -917,7 +943,7 @@ def main():
             mission_path,
             args.slug,
             commit_message=args.message,
-            should_commit=args.commit or args.message is not None,
+            should_commit=not args.no_commit,
         )
     elif args.command == "new":
         cmd_new(
