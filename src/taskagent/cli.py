@@ -257,6 +257,12 @@ def cmd_next(console: Console, issues_root: Path, mission_path: Path):
     if next_issue.dependencies:
         deps_info = f"[bold blue]DEPENDS ON:[/bold blue] [yellow]{', '.join(next_issue.dependencies)}[/yellow]\n"
 
+    # Ensure the pager (usually 'less') supports ANSI colors
+    if "LESS" not in os.environ:
+        os.environ["LESS"] = "RX"
+    elif "R" not in os.environ["LESS"]:
+        os.environ["LESS"] += "R"
+
     with console.pager(styles=True):
         console.print(
             Panel(
