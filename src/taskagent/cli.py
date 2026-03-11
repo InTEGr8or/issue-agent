@@ -434,6 +434,51 @@ def cmd_ingest(console: Console, issues_root: Path, mission_path: Path):
     console.print(f"[bold green]Updated {dp_path}[/bold green]")
 
 
+def cmd_promote(
+    console: Console, issues_root: Path, mission_path: Path, slug_part: str
+):
+    """Promote an issue from draft to pending."""
+    issues = load_mission(issues_root, mission_path)
+
+    # Filter for drafts
+    drafts = [i for i in issues if i.status == "draft"]
+    if not drafts:
+        console.print("[yellow]No issues found in 'draft' status.[/yellow]")
+        return
+
+    # Try to find a match
+    matches = [i for i in drafts if i.slug.startswith(slug_part)]
+
+    if not matches:
+        console.print(f"[red]No draft issue found matching '{slug_part}'.[/red]")
+        return
+
+    if len(matches) > 1:
+        console.print(f"[yellow]Multiple drafts match '{slug_part}':[/yellow]")
+        for m in matches:
+            console.print(f"  - {m.slug}")
+        return
+
+    target = matches[0]
+    issue_file = find_issue_file(issues_root, target.slug)
+    if not issue_file:
+        console.print(f"[red]Issue file not found for '{target.slug}'.[/red]")
+        return
+
+    # Determine paths
+    is_dir_based = issue_file.name == "README.md"
+    source = issue_file.parent if is_dir_based else issue_file
+    dest = issues_root / "pending" / source.name
+
+    console.print(f"[green]Promoting {target.slug} to pending...[/green]")
+    shutil.move(str(source), str(dest))
+
+    # No need to rewrite mission.usv manually as status is derived from location
+    console.print(
+        f"[bold green]Issue '{target.slug}' promoted to pending.[/bold green]"
+    )
+
+
 def extract_deps(file_path: Path) -> List[str]:
     """Helper to extract dependencies from a markdown file."""
     try:
@@ -551,6 +596,14 @@ def main():
         "ingest", help="Ingest existing markdown files into mission.usv"
     )
 
+    # promote
+    promote_parser = subparsers.add_parser(
+        "promote", help="Promote a draft issue to pending"
+    )
+    promote_parser.add_argument(
+        "slug", help="Slug (or partial slug) of the draft issue"
+    )
+
     # done
     done_parser = subparsers.add_parser("done", help="Mark an issue as done")
     done_parser.add_argument(
@@ -578,10 +631,10 @@ def main():
         "version", help="Show or promote project version"
     )
     version_subparsers = version_parser.add_subparsers(dest="version_command")
-    promote_parser = version_subparsers.add_parser(
+    promote_v_parser = version_subparsers.add_parser(
         "promote", help="Promote semantic version"
     )
-    promote_parser.add_argument(
+    promote_v_parser.add_argument(
         "part",
         choices=["major", "minor", "patch"],
         help="Part of the version to promote",
@@ -603,6 +656,8 @@ def main():
         cmd_list(console, issues_root, mission_path)
     elif args.command == "ingest":
         cmd_ingest(console, issues_root, mission_path)
+    elif args.command == "promote":
+        cmd_promote(console, issues_root, mission_path, args.slug)
     elif args.command == "done":
         cmd_done(console, issues_root, mission_path, args.slug)
     elif args.command == "new":

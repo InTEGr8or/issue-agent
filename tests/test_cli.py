@@ -1,5 +1,12 @@
 import pytest
-from taskagent.cli import slugify, load_mission, cmd_new, cmd_done, cmd_ingest
+from taskagent.cli import (
+    slugify,
+    load_mission,
+    cmd_new,
+    cmd_done,
+    cmd_ingest,
+    cmd_promote,
+)
 from rich.console import Console
 from datetime import datetime
 
@@ -106,3 +113,17 @@ def test_cmd_ingest(temp_issues_dir, mission_path):
     assert issues[1].dependencies == ["task-1"]
 
     assert (temp_issues_dir / "datapackage.json").exists()
+
+
+def test_cmd_promote(temp_issues_dir, mission_path):
+    console = Console()
+    cmd_new(console, temp_issues_dir, mission_path, "Draft Task", "Body", draft=True)
+
+    # Promote using partial slug
+    cmd_promote(console, temp_issues_dir, mission_path, "draft-t")
+
+    assert (temp_issues_dir / "pending" / "draft-task.md").exists()
+    assert not (temp_issues_dir / "draft" / "draft-task.md").exists()
+
+    issues = load_mission(temp_issues_dir, mission_path)
+    assert issues[0].status == "pending"
