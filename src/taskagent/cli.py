@@ -257,20 +257,27 @@ def cmd_next(console: Console, issues_root: Path, mission_path: Path):
     if next_issue.dependencies:
         deps_info = f"[bold blue]DEPENDS ON:[/bold blue] [yellow]{', '.join(next_issue.dependencies)}[/yellow]\n"
 
-    with console.pager(styles=True):
-        console.print(
-            Panel(
-                f"[bold blue]NEXT ISSUE:[/bold blue] [cyan]{next_issue.slug}[/cyan]\n"
-                f"[bold blue]PRIORITY:[/bold blue] {next_issue.priority} | "
-                f"[bold blue]STATUS:[/bold blue] {next_issue.status}\n"
-                f"{deps_info}"
-                f"[bold blue]FILE:[/bold blue] {issue_file}",
-                title="Task Agent",
-                expand=False,
-            )
-        )
+    panel = Panel(
+        f"[bold blue]NEXT ISSUE:[/bold blue] [cyan]{next_issue.slug}[/cyan]\n"
+        f"[bold blue]PRIORITY:[/bold blue] {next_issue.priority} | "
+        f"[bold blue]STATUS:[/bold blue] {next_issue.status}\n"
+        f"{deps_info}"
+        f"[bold blue]FILE:[/bold blue] {issue_file}",
+        title="Task Agent",
+        expand=False,
+    )
+    md = Markdown(content)
 
-        md = Markdown(content)
+    # Estimate lines: Panel (~6) + Markdown content + some buffer
+    total_lines = 8 + content.count("\n")
+    terminal_height = console.size.height
+
+    if total_lines > terminal_height:
+        with console.pager(styles=True):
+            console.print(panel)
+            console.print(md)
+    else:
+        console.print(panel)
         console.print(md)
 
 
@@ -846,6 +853,14 @@ def cmd_version(console: Console, promote: Optional[str] = None, tag: bool = Fal
 
 
 def main():
+    # Ensure the pager (usually 'less') supports ANSI colors and quits if one screen
+    if "LESS" not in os.environ:
+        os.environ["LESS"] = "RFX"
+    else:
+        for flag in ["R", "F", "X"]:
+            if flag not in os.environ["LESS"]:
+                os.environ["LESS"] += flag
+
     parser = argparse.ArgumentParser(description="Task Agent CLI")
     parser.add_argument(
         "-V", "--version", action="store_true", help="Show task-agent tool version"
