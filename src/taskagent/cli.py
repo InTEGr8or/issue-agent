@@ -897,6 +897,7 @@ def cmd_run(
         console.print(
             "[yellow]Ensure you have a worker script (e.g., .ta/worker) configured in your project root.[/yellow]"
         )
+        console.print("[blue]Run 'ta init-worker' to set up a reference worker.[/blue]")
         return
 
     if not os.access(worker_executable, os.X_OK):
@@ -922,6 +923,72 @@ def cmd_run(
         console.print(f"[red]Worker failed with exit code {e.returncode}.[/red]")
     except KeyboardInterrupt:
         console.print("\n[yellow]Worker interrupted by user.[/yellow]")
+
+
+def cmd_init_worker(console: Console, template: str = "adk"):
+    """Scaffold a sidecar worker in the current project."""
+    target_ta_dir = Path(".ta")
+    target_sidecar_dir = target_ta_dir / "sidecars" / f"{template}-worker"
+
+    if target_sidecar_dir.exists():
+        console.print(
+            f"[yellow]Sidecar worker already exists at {target_sidecar_dir}. Skipping scaffolding.[/yellow]"
+        )
+        return
+
+    # 1. Locate the bundled template in the package
+    # In a real installation, it will be in the site-packages/taskagent/sidecars
+    # For local development, it's in sidecars/
+    pkg_root = Path(__file__).parent.parent.parent
+    source_dir = pkg_root / "sidecars" / f"{template}-worker"
+
+    if not source_dir.exists():
+        # Fallback for installed package
+        import importlib.resources
+
+        try:
+            # Modern way to get files from package data
+            traversable_root = importlib.resources.files("taskagent")
+            # Sidecars are alongside src/taskagent in the root of the project/package
+            # We convert to string to use Path operations safely
+            source_dir = (
+                Path(str(traversable_root)).parent / "sidecars" / f"{template}-worker"
+            )
+        except Exception:
+            pass
+
+    if not source_dir.exists():
+        console.print(
+            f"[red]Error: Template '{template}' not found at {source_dir}[/red]"
+        )
+        return
+
+    console.print(f"[blue]Scaffolding {template} worker from {source_dir}...[/blue]")
+
+    # 2. Copy the sidecar files
+    target_sidecar_dir.mkdir(parents=True, exist_ok=True)
+    for item in source_dir.iterdir():
+        if item.is_file():
+            shutil.copy(str(item), str(target_sidecar_dir / item.name))
+
+    # 3. Create the .ta/worker entrypoint
+    worker_script = target_ta_dir / "worker"
+    script_content = f"""#!/usr/bin/env bash
+# Using uv run --project allows running the sidecar with its own isolated dependencies
+# without polluting the core task-agent environment.
+uv run --project {target_sidecar_dir} python {target_sidecar_dir}/worker.py
+"""
+    worker_script.write_text(script_content, encoding="utf-8")
+    worker_script.chmod(0o755)
+
+    console.print(
+        f"[bold green]Successfully initialized {template} worker![/bold green]"
+    )
+    console.print(f"Entrypoint: [cyan]{worker_script}[/cyan]")
+    console.print(f"Code: [cyan]{target_sidecar_dir}[/cyan]")
+    console.print(
+        f"\n[yellow]Note:[/yellow] Make sure to configure your API keys in [cyan]{target_sidecar_dir}/.env[/cyan]"
+    )
 
 
 def cmd_version(console: Console, promote: Optional[str] = None, tag: bool = False):
@@ -1083,6 +1150,14 @@ def main():
         "slug", nargs="?", help="Slug (or partial slug) of the issue"
     )
 
+    # init-worker
+    init_worker_parser = subparsers.add_parser(
+        "init-worker", help="Scaffold a sidecar worker in the current project"
+    )
+    init_worker_parser.add_argument(
+        "--template", default="adk", help="Worker template to use (default: adk)"
+    )
+
     # done
     done_parser = subparsers.add_parser("done", help="Mark an issue as done")
     done_parser.add_argument(
@@ -1167,6 +1242,8 @@ def main():
         cmd_start(console, issues_root, mission_path, args.slug)
     elif args.command == "run":
         cmd_run(console, issues_root, mission_path, args.slug)
+    elif args.command == "init-worker":
+        cmd_init_worker(console, template=args.template)
     elif args.command == "done":
         cmd_done(
             console,

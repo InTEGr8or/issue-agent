@@ -1,6 +1,6 @@
 [project]
 name = "task-agent"
-version = "0.1.58"
+version = "0.1.60"
 description = "A prioritized, file-based task queue for autonomous agentic workers"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -23,6 +23,7 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/taskagent"]
+artifacts = ["sidecars/"]
 
 [dependency-groups]
 dev = [
@@ -34,7 +35,7 @@ dev = [
 ]
 
 [tool.bumpversion]
-current_version = "0.1.58"
+current_version = "0.1.60"
 parse = "(?P<major>\\d+)\\.(?P<minor>\\d+)\\.(?P<patch>\\d+)"
 serialize = ["{major}.{minor}.{patch}"]
 search = "version = \"{current_version}\""
