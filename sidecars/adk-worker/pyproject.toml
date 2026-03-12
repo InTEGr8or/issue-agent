@@ -1,0 +1,13 @@
+[project]
+name = "adk-worker"
+version = "0.1.0"
+description = "Reference ADK-based sidecar worker for task-agent"
+requires-python = ">=3.12"
+dependencies = [
+    "google-adk",
+    "python-dotenv",
+    "rich",
+]
+
+[project.scripts]
+worker = "worker:main"

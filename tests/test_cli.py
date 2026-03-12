@@ -115,6 +115,88 @@ def test_cmd_ingest(temp_issues_dir, mission_path):
     assert (temp_issues_dir / "datapackage.json").exists()
 
 
+def test_cmd_start(temp_issues_dir, mission_path, monkeypatch):
+    from taskagent import cli
+    import subprocess
+
+    console = Console()
+    cmd_new(console, temp_issues_dir, mission_path, "Start Task", "Body", draft=False)
+
+    calls = []
+
+    def mock_run(args, **kwargs):
+        calls.append(args)
+
+        # Return a mock object with returncode=0
+        class MockCompletedProcess:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+
+        return MockCompletedProcess()
+
+    monkeypatch.setattr(subprocess, "run", mock_run)
+
+    cli.cmd_start(console, temp_issues_dir, mission_path, "start-task")
+
+    # Should be moved to active/
+    assert (temp_issues_dir / "active" / "start-task.md").exists()
+    assert not (temp_issues_dir / "pending" / "start-task.md").exists()
+
+    # Should have attempted to create worktree
+    assert len(calls) > 0
+    # Check if any call looks like git worktree add
+    wt_call = next((c for c in calls if "worktree" in c and "add" in c), None)
+    assert wt_call is not None
+    assert "-b" in wt_call
+    assert "issue/start-task" in wt_call
+
+
+def test_cmd_run(temp_issues_dir, mission_path, monkeypatch):
+    from taskagent import cli
+    import subprocess
+    from pathlib import Path
+
+    console = Console()
+
+    # Create an active issue
+    cmd_new(console, temp_issues_dir, mission_path, "Run Task", "Body", draft=False)
+    cli.cmd_active(console, temp_issues_dir, mission_path, "run-task", silent=True)
+
+    calls = []
+
+    def mock_run(args, **kwargs):
+        calls.append((args, kwargs.get("env", {})))
+
+        class MockCompletedProcess:
+            returncode = 0
+
+        return MockCompletedProcess()
+
+    monkeypatch.setattr(subprocess, "run", mock_run)
+
+    # Mock existence and executability of .ta/worker
+    original_exists = Path.exists
+
+    def mock_exists(self):
+        if str(self).endswith(".ta/worker"):
+            return True
+        return original_exists(self)
+
+    monkeypatch.setattr(Path, "exists", mock_exists)
+
+    monkeypatch.setattr("os.access", lambda path, mode: True)
+
+    cli.cmd_run(console, temp_issues_dir, mission_path, "run-task")
+
+    assert len(calls) == 1
+    args, env = calls[0]
+    assert str(args[0]).endswith(".ta/worker")
+    assert env["TA_SLUG"] == "run-task"
+    assert "TA_FILE" in env
+    assert "TA_ROOT" in env
+
+
 def test_cmd_promote(temp_issues_dir, mission_path):
     console = Console()
     cmd_new(console, temp_issues_dir, mission_path, "Draft Task", "Body", draft=True)

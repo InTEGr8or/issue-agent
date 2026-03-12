@@ -693,11 +693,12 @@ def cmd_active(
     issues_root: Path,
     mission_path: Path,
     slug_part: Optional[str] = None,
-):
+    silent: bool = False,
+) -> Optional[Issue]:
     """Move an issue to active status."""
     issues = load_mission(issues_root, mission_path)
     target = select_issue(
-        console, issues, slug_part, status_filter=["pending", "draft"]
+        console, issues, slug_part, status_filter=["pending", "draft", "active"]
     )
 
     if not target:
@@ -707,22 +708,97 @@ def cmd_active(
             )
         else:
             console.print("[yellow]No issues available to mark as active.[/yellow]")
-        return
+        return None
+
+    if target.status == "active":
+        if not silent:
+            console.print(f"[yellow]Issue '{target.slug}' is already active.[/yellow]")
+        return target
 
     issue_file = find_issue_file(issues_root, target.slug)
     if not issue_file:
         console.print(f"[red]Issue file not found for '{target.slug}'.[/red]")
-        return
+        return None
 
     # Determine paths
     is_dir_based = issue_file.name == "README.md"
     source = issue_file.parent if is_dir_based else issue_file
     dest = issues_root / "active" / source.name
 
-    console.print(f"[green]Marking {target.slug} as active...[/green]")
+    if not silent:
+        console.print(f"[green]Marking {target.slug} as active...[/green]")
     shutil.move(str(source), str(dest))
-    console.print(f"[bold green]Issue '{target.slug}' is now active.[/bold green]")
+    if not silent:
+        console.print(f"[bold green]Issue '{target.slug}' is now active.[/bold green]")
     sync_mission(issues_root, mission_path)
+    # Update target status after move
+    target.status = "active"
+    return target
+
+
+def cmd_start(
+    console: Console,
+    issues_root: Path,
+    mission_path: Path,
+    slug_part: Optional[str] = None,
+):
+    """Move an issue to active and set up a git worktree."""
+    target = cmd_active(console, issues_root, mission_path, slug_part, silent=False)
+    if not target:
+        return
+
+    slug = target.slug
+    branch_name = f"issue/{slug}"
+    worktree_path = Path(".gwt") / slug
+
+    if worktree_path.exists():
+        console.print(
+            f"[yellow]Worktree directory already exists: {worktree_path}[/yellow]"
+        )
+        return
+
+    console.print(
+        f"[blue]Creating branch [bold]{branch_name}[/bold] and worktree at [bold]{worktree_path}[/bold]...[/blue]"
+    )
+
+    try:
+        # 1. Ensure .gwt exists
+        Path(".gwt").mkdir(exist_ok=True)
+
+        # 2. Add worktree
+        # git worktree add -b <branch> <path>
+        subprocess.run(
+            ["git", "worktree", "add", "-b", branch_name, str(worktree_path)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        console.print(f"[bold green]Successfully started issue '{slug}'.[/bold green]")
+        console.print(f"Worktree: [cyan]{worktree_path}[/cyan]")
+        console.print(f"Branch: [cyan]{branch_name}[/cyan]")
+
+    except subprocess.CalledProcessError as e:
+        console.print(f"[red]Error creating worktree: {e.stderr.strip()}[/red]")
+        # If it failed because branch exists, try adding without -b
+        if "already exists" in e.stderr and branch_name in e.stderr:
+            console.print(
+                f"[yellow]Branch {branch_name} already exists. Attempting to use existing branch...[/yellow]"
+            )
+            try:
+                subprocess.run(
+                    ["git", "worktree", "add", str(worktree_path), branch_name],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                console.print(
+                    f"[bold green]Successfully attached worktree to existing branch {branch_name}.[/bold green]"
+                )
+            except subprocess.CalledProcessError as e2:
+                console.print(
+                    f"[red]Failed to add worktree even with existing branch: {e2.stderr.strip()}[/red]"
+                )
 
 
 def cmd_prioritize(
@@ -790,6 +866,62 @@ def extract_deps(file_path: Path) -> List[str]:
     except Exception:
         pass
     return []
+
+
+def cmd_run(
+    console: Console,
+    issues_root: Path,
+    mission_path: Path,
+    slug_part: Optional[str] = None,
+):
+    """Run the sidecar worker for an issue."""
+    issues = load_mission(issues_root, mission_path)
+    target = select_issue(console, issues, slug_part, status_filter=["active"])
+
+    if not target:
+        if slug_part:
+            console.print(f"[red]No active issue found matching '{slug_part}'.[/red]")
+        else:
+            console.print("[yellow]No active issues found to run.[/yellow]")
+        return
+
+    issue_file = find_issue_file(issues_root, target.slug)
+    if not issue_file:
+        console.print(f"[red]Issue file not found for '{target.slug}'.[/red]")
+        return
+
+    # Protocol: Look for .ta/worker in project root
+    worker_executable = Path(".ta") / "worker"
+    if not worker_executable.exists():
+        console.print(f"[red]Sidecar worker not found at {worker_executable}[/red]")
+        console.print(
+            "[yellow]Ensure you have a worker script (e.g., .ta/worker) configured in your project root.[/yellow]"
+        )
+        return
+
+    if not os.access(worker_executable, os.X_OK):
+        console.print(f"[red]Worker at {worker_executable} is not executable.[/red]")
+        return
+
+    console.print(
+        f"[blue]Launching sidecar worker for [bold]{target.slug}[/bold]...[/blue]"
+    )
+
+    env = os.environ.copy()
+    env["TA_SLUG"] = target.slug
+    env["TA_FILE"] = str(issue_file.absolute())
+    env["TA_ROOT"] = str(Path.cwd().absolute())
+
+    try:
+        # Run worker, piping through to the console
+        subprocess.run([str(worker_executable.absolute())], env=env, check=True)
+        console.print(
+            f"[bold green]Worker for '{target.slug}' finished successfully.[/bold green]"
+        )
+    except subprocess.CalledProcessError as e:
+        console.print(f"[red]Worker failed with exit code {e.returncode}.[/red]")
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Worker interrupted by user.[/yellow]")
 
 
 def cmd_version(console: Console, promote: Optional[str] = None, tag: bool = False):
@@ -935,6 +1067,22 @@ def main():
         "slug", nargs="?", help="Slug (or partial slug) of the issue"
     )
 
+    # start
+    start_parser = subparsers.add_parser(
+        "start", help="Move an issue to active and setup worktree"
+    )
+    start_parser.add_argument(
+        "slug", nargs="?", help="Slug (or partial slug) of the issue"
+    )
+
+    # run
+    run_parser = subparsers.add_parser(
+        "run", help="Invoke the sidecar worker for an active issue"
+    )
+    run_parser.add_argument(
+        "slug", nargs="?", help="Slug (or partial slug) of the issue"
+    )
+
     # done
     done_parser = subparsers.add_parser("done", help="Mark an issue as done")
     done_parser.add_argument(
@@ -1015,6 +1163,10 @@ def main():
         cmd_promote(console, issues_root, mission_path, args.slug)
     elif args.command == "active":
         cmd_active(console, issues_root, mission_path, args.slug)
+    elif args.command == "start":
+        cmd_start(console, issues_root, mission_path, args.slug)
+    elif args.command == "run":
+        cmd_run(console, issues_root, mission_path, args.slug)
     elif args.command == "done":
         cmd_done(
             console,

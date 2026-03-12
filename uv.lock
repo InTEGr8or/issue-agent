@@ -629,7 +629,7 @@ wheels = [
 
 [[package]]
 name = "task-agent"
-version = "0.1.52"
+version = "0.1.56"
 source = { editable = "." }
 dependencies = [
     { name = "pydantic" },
