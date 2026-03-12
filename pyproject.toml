@@ -31,10 +31,6 @@ dev = [
     "bump-my-version==1.2.7",
     "pre-commit>=4.5.1",
     "pytest>=9.0.2",
-    "google-adk>=1.26.0",
-    "google-genai>=1.66.0",
-    "python-dotenv>=1.2.2",
-    "onepassword-sdk>=0.4.0",
 ]
 
 [tool.bumpversion]
@@ -49,3 +45,6 @@ allow_dirty = true
 filename = "pyproject.toml"
 search = "version = \"{current_version}\""
 replace = "version = \"{new_version}\""
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
