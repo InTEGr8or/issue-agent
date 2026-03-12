@@ -34,6 +34,35 @@ To run all checks:
 make lint
 ```
 
+## 🚀 Workflow
+
+We use `task-agent` to manage our own development.
+
+1.  **Start a task**:
+    ```bash
+    ta start <slug>
+    ```
+    This creates a dedicated git branch and worktree in `.gwt/<slug>`.
+2.  **Run autonomous sidecars**:
+    ```bash
+    ta run <slug>
+    ```
+    This invokes the sidecar worker (at `.ta/worker`) to process the task.
+
+## ✅ Completing Tasks
+
+Always use **`ta done`** to complete a task.
+
+```bash
+ta done <slug>
+```
+
+**Why use `ta done`?**
+-   **Auto-move**: Automatically moves the issue to `completed/{year}/`.
+-   **Auto-commit**: Creates a git commit with a standard message (e.g., `feat: complete <slug>`).
+-   **Traceability**: Automatically records the commit hash directly into the completed issue file for future reference.
+-   **Versioning**: If the project has a `pyproject.toml` or `package.json`, it will auto-promote the patch version.
+
 ## 📦 Releasing
 
 Releases are automated via GitHub Actions when a tag is pushed.

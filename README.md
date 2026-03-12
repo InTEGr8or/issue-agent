@@ -25,9 +25,9 @@ The `ta` tool automates the transition of issues through the queue and manages t
 | :--- | :--- |
 | `ta next` | Displays the top prioritized issue from `mission.usv`. |
 | `ta new` | Creates a new issue file and adds it to the queue. |
-| `ta done` | Moves issue to `completed/`, and removes it from the queue. |
-| `ta start <slug>` | (Planned) Moves issue to `active/`, creates a git branch, and sets up a `.gwt/` worktree. |
-| `ta run <slug>` | (Planned) Invokes Gemini CLI in **headless mode** within the issue's specific worktree. |
+| `ta done` | Moves issue to `completed/`, removes it from the queue, and auto-commits the result. |
+| `ta start <slug>` | Moves issue to `active/`, creates a git branch, and sets up a `.gwt/` worktree. |
+| `ta run <slug>` | Invokes the sidecar worker defined at `.ta/worker` to process an active issue. |
 
 ## 🚀 Workflow
 
