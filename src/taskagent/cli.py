@@ -342,15 +342,18 @@ def cmd_eject_mission(console: Console, manager: TaskAgent, public: bool = False
 
         # 4. Remove old dir and Symlink
         shutil.rmtree(str(source_dir))
-        # Use an absolute symlink for maximum local robustness
-        os.symlink(str(target_path.absolute()), str(source_dir))
+
+        # Create a relative symlink for portability across different machines/clones
+        # We need the path from the 'docs/' folder up to the parent and into target_name
+        rel_target = os.path.relpath(target_path, source_dir.parent)
+        os.symlink(rel_target, str(source_dir))
 
         console.print(
             "[bold green]Successfully ejected mission repository![/bold green]"
         )
         console.print(f"Mission Repo: [cyan]{target_path.absolute()}[/cyan]")
         console.print(
-            f"Symlink: [cyan]{source_dir}[/cyan] -> [cyan]{target_path.absolute()}[/cyan]"
+            f"Symlink: [cyan]{source_dir}[/cyan] -> [cyan]{rel_target}[/cyan]"
         )
         console.print(
             "\n[yellow]Recommended:[/yellow] Commit the symlink to your repository so it persists across branches:"

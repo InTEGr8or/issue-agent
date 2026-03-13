@@ -12,7 +12,9 @@ def discover(start_path: Optional[Path] = None) -> TaskAgent:
     Checks in order:
     1. TA_CONFIG_DIR environment variable.
     2. .ta-config.json in start_path or any parent.
-    3. docs/issues/ directory in start_path or any parent.
+    3. pyproject.toml [tool.taskagent] in start_path or any parent.
+    4. docs/issues/ directory in start_path or any parent.
+    5. ~/.config/task-agent/settings.json (Global fallback)
 
     Returns:
         TaskAgent: Initialized manager for the discovered instance.
@@ -23,7 +25,7 @@ def discover(start_path: Optional[Path] = None) -> TaskAgent:
     current = Path(start_path or Path.cwd()).absolute()
 
     while True:
-        # Check for explicit config file
+        # 1. Check for explicit config file
         config_file = current / ".ta-config.json"
         if config_file.exists():
             try:
@@ -33,7 +35,22 @@ def discover(start_path: Optional[Path] = None) -> TaskAgent:
             except Exception:
                 pass
 
-        # Check for standard folder
+        # 2. Check for pyproject.toml
+        pyproject = current / "pyproject.toml"
+        if pyproject.exists():
+            try:
+                import tomllib
+
+                with pyproject.open("rb") as f:
+                    data = tomllib.load(f)
+                    ta_cfg = data.get("tool", {}).get("taskagent")
+                    if ta_cfg and "issues_dir" in ta_cfg:
+                        return TaskAgent(config_dir=str(current / ta_cfg["issues_dir"]))
+            except Exception:
+                # Fallback if tomllib is missing or parse fails
+                pass
+
+        # 3. Check for standard folder
         issues_dir = current / "docs" / "issues"
         if issues_dir.exists() and issues_dir.is_dir():
             return TaskAgent(config_dir=str(issues_dir))
@@ -43,6 +60,16 @@ def discover(start_path: Optional[Path] = None) -> TaskAgent:
         if parent == current:
             break
         current = parent
+
+    # 4. Check Global Config
+    global_config = Path("~/.config/task-agent/settings.json").expanduser()
+    if global_config.exists():
+        try:
+            config = json.loads(global_config.read_text())
+            if "issues_dir" in config:
+                return TaskAgent(config_dir=config["issues_dir"])
+        except Exception:
+            pass
 
     # Fallback to default (which will create docs/issues in starting search dir if not found)
     # We use start_path or cwd as the base
