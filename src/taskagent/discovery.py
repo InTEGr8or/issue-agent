@@ -11,8 +11,15 @@ def _handle_ejected_symlink(current_root: Path):
     Checks for TA_EJECT_ISSUES and ensures docs/issues symlink is correct.
     This 'auto-heals' links in new worktrees or clones.
     """
-    # Load .env from project root
-    load_dotenv(current_root / ".env")
+    # 1. Try to find the primary .env
+    # If we are in a worktree (.gwt/something), look in the parent project root
+    env_path = current_root / ".env"
+    if not env_path.exists() and current_root.parent.name == ".gwt":
+        # We are in a task-agent managed worktree
+        env_path = current_root.parent.parent / ".env"
+
+    if env_path.exists():
+        load_dotenv(env_path)
 
     eject_enabled = os.environ.get("TA_EJECT_ISSUES", "").lower() == "true"
     target_path_str = os.environ.get("TA_EJECTED_ISSUES_PATH")
