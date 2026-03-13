@@ -481,6 +481,18 @@ def cmd_self_up(console: Console):
         console.print("[bold green]Successfully upgraded task-agent.[/bold green]")
     except subprocess.CalledProcessError as e:
         console.print(f"[red]Error upgrading task-agent: {e}[/red]")
+        if os.name == "nt":
+            console.print("\n[yellow]Note for Windows users:[/yellow]")
+            console.print(
+                "If you see 'The process cannot access the file', it means [bold]ta.exe[/bold] is locked."
+            )
+            console.print(
+                "This happens if an MCP session or another terminal is using it."
+            )
+            console.print(
+                "Please [bold]close all chats and other terminals[/bold], then run:"
+            )
+            console.print("  [cyan]uv tool upgrade task-agent[/cyan]\n")
 
 
 def cmd_run(console: Console, manager: TaskManager, slug_part: Optional[str] = None):
