@@ -446,6 +446,22 @@ def cmd_promote(console: Console, manager: TaskAgent, slug_part: str):
         console.print(f"[red]Error: {e}[/red]")
 
 
+def cmd_demote(console: Console, manager: TaskAgent, slug_part: str):
+    """Demote an issue from pending to draft."""
+    issues = manager.load_mission()
+    target = select_issue(console, issues, slug_part, status_filter=["pending"])
+    if not target:
+        console.print(f"[red]No pending issue found matching '{slug_part}'.[/red]")
+        return
+    try:
+        manager.demote_issue(target.slug)
+        console.print(
+            f"[bold green]Issue '{target.slug}' demoted to draft.[/bold green]"
+        )
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+
+
 def cmd_active(
     console: Console,
     manager: TaskAgent,
@@ -766,7 +782,7 @@ def cmd_triage(console: Console, manager: TaskAgent):
                     style=style,
                 )
 
-            help_text = "\n[dim]j/k: move cursor | ctrl+k/j: change priority | p: promote | q: exit[/dim]"
+            help_text = "\n[dim]j/k: move cursor | ctrl+k/j: change priority | p: promote | d: demote | q: exit[/dim]"
             live.update(
                 Panel(table, subtitle=help_text, border_style="blue"), refresh=True
             )
@@ -803,6 +819,14 @@ def cmd_triage(console: Console, manager: TaskAgent):
                 if issue.status == "draft":
                     try:
                         manager.promote_issue(issue.slug)
+                        issues = manager.load_mission()
+                    except Exception:
+                        pass
+            elif key == "d":  # demote
+                issue = issues[cursor]
+                if issue.status == "pending":
+                    try:
+                        manager.demote_issue(issue.slug)
                         issues = manager.load_mission()
                     except Exception:
                         pass
@@ -857,6 +881,7 @@ def display_overview(console: Console, manager: TaskAgent):
         ("", ""),  # Spacer
         ("active", "Mark a task as active without starting a worktree"),
         ("promote", "Promote a draft task to pending"),
+        ("demote", "Demote a pending task back to draft"),
         ("up/down", "Adjust task priority"),
         ("ingest", "Scan disk for new markdown tasks"),
         ("", ""),  # Spacer
@@ -896,6 +921,8 @@ def main():
     down_parser.add_argument("slug")
     promote_parser = subparsers.add_parser("promote")
     promote_parser.add_argument("slug")
+    demote_parser = subparsers.add_parser("demote")
+    demote_parser.add_argument("slug")
     active_parser = subparsers.add_parser("active")
     active_parser.add_argument("slug", nargs="?")
     start_parser = subparsers.add_parser("start")
@@ -974,6 +1001,8 @@ def main():
         cmd_prioritize(console, manager, args.slug, "down")
     elif args.command == "promote":
         cmd_promote(console, manager, args.slug)
+    elif args.command == "demote":
+        cmd_demote(console, manager, args.slug)
     elif args.command == "active":
         cmd_active(console, manager, args.slug)
     elif args.command == "start":

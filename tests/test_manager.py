@@ -40,3 +40,13 @@ def test_api_sync_mission(manager):
     # pending (B) should be before draft (A)
     assert issues[0].slug == "task-b"
     assert issues[1].slug == "task-a"
+
+
+def test_api_demote_issue(manager):
+    manager.create_issue("Demote Me")
+    # Starts as pending
+    assert (manager.issues_root / "pending" / "demote-me.md").exists()
+
+    manager.demote_issue("demote-me")
+    assert not (manager.issues_root / "pending" / "demote-me.md").exists()
+    assert (manager.issues_root / "draft" / "demote-me.md").exists()

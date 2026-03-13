@@ -256,6 +256,28 @@ class TaskAgent:
         target.status = "pending"
         return target
 
+    def demote_issue(self, slug: str) -> Issue:
+        """Demote an issue from pending to draft."""
+        issues = self.load_mission()
+        target = next(
+            (i for i in issues if i.slug == slug and i.status == "pending"), None
+        )
+        if not target:
+            raise ValueError(f"Pending issue '{slug}' not found.")
+
+        issue_file = self.find_issue_file(target.slug)
+        if not issue_file:
+            raise FileNotFoundError(f"Issue file not found for '{target.slug}'.")
+
+        is_dir_based = issue_file.name == "README.md"
+        source = issue_file.parent if is_dir_based else issue_file
+        dest = self.issues_root / "draft" / source.name
+
+        shutil.move(str(source), str(dest))
+        self.sync_mission()
+        target.status = "draft"
+        return target
+
     def move_to_active(self, slug: str) -> Issue:
         """Move an issue to active status."""
         issues = self.load_mission()

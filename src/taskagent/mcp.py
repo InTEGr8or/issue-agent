@@ -48,6 +48,28 @@ def create_task(
 
 
 @mcp.tool()
+def promote_task(slug: str) -> str:
+    """Promote a task from 'draft' to 'pending' status."""
+    manager = get_manager()
+    try:
+        manager.promote_issue(slug)
+        return f"Task '{slug}' promoted to pending."
+    except Exception as e:
+        return f"Error promoting task: {e}"
+
+
+@mcp.tool()
+def demote_task(slug: str) -> str:
+    """Demote a task from 'pending' back to 'draft' status."""
+    manager = get_manager()
+    try:
+        manager.demote_issue(slug)
+        return f"Task '{slug}' demoted to draft."
+    except Exception as e:
+        return f"Error demoting task: {e}"
+
+
+@mcp.tool()
 def mark_task_active(slug: str) -> str:
     """Move a task to 'active' status, indicating work has started."""
     manager = get_manager()
