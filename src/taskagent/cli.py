@@ -598,14 +598,34 @@ def cmd_init_mcp(console: Console, scope: str = "project"):
         )
 
 
-def cmd_version(console: Console, promote: Optional[str] = None, tag: bool = False):
+def cmd_version(
+    console: Console,
+    promote: Optional[str] = None,
+    tag: bool = False,
+    push: bool = False,
+):
     """Show project version, promote it, or tag it."""
     try:
         v, source = get_project_version()
         if tag:
+            if v == "unknown":
+                console.print(
+                    "[red]Error: Could not determine project version to tag.[/red]"
+                )
+                return
             tag_name = f"v{v}"
+            console.print(f"[blue]Tagging current commit as {tag_name}...[/blue]")
             subprocess.run(["git", "tag", tag_name], check=True)
             console.print(f"[bold green]Tagged commit as {tag_name}[/bold green]")
+
+            if push:
+                console.print(f"[blue]Pushing tag {tag_name} to origin...[/blue]")
+                subprocess.run(["git", "push", "origin", tag_name], check=True)
+                console.print(
+                    f"[bold green]Successfully pushed {tag_name}[/bold green]"
+                )
+            return
+
         elif promote:
             if source == "pyproject.toml":
                 subprocess.run(
@@ -835,7 +855,10 @@ def main():
     v_sub = version_parser.add_subparsers(dest="version_command")
     p_v = v_sub.add_parser("promote")
     p_v.add_argument("part", choices=["major", "minor", "patch"])
-    v_sub.add_parser("tag")
+    tag_parser = v_sub.add_parser("tag")
+    tag_parser.add_argument(
+        "--push", action="store_true", help="Push the tag to origin"
+    )
 
     args = parser.parse_args()
     console = Console()
@@ -894,7 +917,7 @@ def main():
         if args.version_command == "promote":
             cmd_version(console, args.part)
         elif args.version_command == "tag":
-            cmd_version(console, tag=True)
+            cmd_version(console, tag=True, push=args.push)
         else:
             cmd_version(console)
     else:

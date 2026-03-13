@@ -9,12 +9,16 @@ jobs:
   publish:
     name: Build and publish
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     permissions:
       id-token: write  # Mandatory for trusted publishing
       contents: read
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
