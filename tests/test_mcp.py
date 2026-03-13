@@ -48,6 +48,27 @@ def test_mcp_complete_task(mock_manager):
     mock_manager.complete_issue.assert_called_once_with("task-1", commit_message="Done")
 
 
+def test_mcp_search_task(mock_manager, tmp_path):
+    issue_file = tmp_path / "pending" / "task-1.md"
+    issue_file.parent.mkdir()
+    issue_file.write_text("content")
+    mock_manager.find_issue_file.return_value = issue_file
+
+    result = mcp.search_task("task-1")
+    assert "found in [bold]pending[/bold]" in result
+    mock_manager.find_issue_file.assert_called_once_with(
+        "task-1", include_completed=True
+    )
+
+
+def test_mcp_restore_task(mock_manager):
+    mock_manager.restore_issue.return_value = Issue(slug="task-1", status="active")
+
+    result = mcp.restore_task("task-1", status="active")
+    assert "Task 'task-1' restored to 'active'" in result
+    mock_manager.restore_issue.assert_called_once_with("task-1", to_status="active")
+
+
 def test_mcp_get_task_details(mock_manager, tmp_path):
     issue_file = tmp_path / "task-1.md"
     issue_file.write_text("# Task 1\nContent")

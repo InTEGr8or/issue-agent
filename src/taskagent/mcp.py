@@ -91,10 +91,48 @@ def complete_task(slug: str, message: Optional[str] = None) -> str:
     """
     manager = get_manager()
     try:
-        _, commit_hash = manager.complete_issue(slug, commit_message=message)
+        issue, commit_hash = manager.complete_issue(slug, commit_message=message)
         return f"Task '{slug}' completed. Commit: {commit_hash}"
     except Exception as e:
         return f"Error completing task: {e}"
+
+
+@mcp.tool()
+def search_task(slug: str) -> str:
+    """Search for a task by slug, including in completed tasks.
+
+    Args:
+        slug: The slug of the task to search for.
+    """
+    manager = get_manager()
+    issue_file = manager.find_issue_file(slug, include_completed=True)
+    if not issue_file:
+        return f"Task '{slug}' not found anywhere."
+
+    # Determine status based on path
+    status = "unknown"
+    for s in ["pending", "draft", "active", "completed"]:
+        if f"/{s}/" in str(issue_file.absolute()):
+            status = s
+            break
+
+    return f"Task '{slug}' found in [bold]{status}[/bold]. Location: {issue_file}"
+
+
+@mcp.tool()
+def restore_task(slug: str, status: str = "pending") -> str:
+    """Restore a completed task back to pending, draft, or active status.
+
+    Args:
+        slug: The slug of the task to restore.
+        status: The target status ('pending', 'draft', or 'active'). Defaults to 'pending'.
+    """
+    manager = get_manager()
+    try:
+        manager.restore_issue(slug, to_status=status)
+        return f"Task '{slug}' restored to '{status}'."
+    except Exception as e:
+        return f"Error restoring task: {e}"
 
 
 @mcp.tool()

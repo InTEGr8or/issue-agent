@@ -73,18 +73,25 @@ class TaskAgent:
         text = re.sub(r"[-]+", "-", text)
         return text.strip("-")
 
-    def find_issue_file(self, slug: str) -> Optional[Path]:
+    def find_issue_file(
+        self, slug: str, include_completed: bool = False
+    ) -> Optional[Path]:
         """Find the issue markdown file by slug.
         Checks for slug.md OR slug/README.md.
         Resilient to underscore/hyphen differences."""
         if not self.issues_root.exists():
             return None
 
-        search_dirs = [
-            d
-            for d in self.issues_root.iterdir()
-            if d.is_dir() and d.name != "completed"
-        ]
+        search_dirs = [d for d in self.issues_root.iterdir() if d.is_dir()]
+        if not include_completed:
+            search_dirs = [d for d in search_dirs if d.name != "completed"]
+        else:
+            # If including completed, we also need to search the year-based subdirectories
+            completed_root = self.issues_root / "completed"
+            if completed_root.exists():
+                for year_dir in completed_root.iterdir():
+                    if year_dir.is_dir():
+                        search_dirs.append(year_dir)
 
         # Normalize target slug
         target_slug = self.slugify(slug)
@@ -111,6 +118,56 @@ class TaskAgent:
                         return readme
 
         return None
+
+    def restore_issue(self, slug: str, to_status: str = "pending") -> Issue:
+        """Restore a completed issue back to a specified status."""
+        if to_status not in ["pending", "draft", "active"]:
+            raise ValueError(f"Invalid restoration status: {to_status}")
+
+        issue_file = self.find_issue_file(slug, include_completed=True)
+        if not issue_file:
+            raise FileNotFoundError(f"Completed issue '{slug}' not found.")
+
+        # Ensure it's actually in completed/
+        if "completed" not in str(issue_file):
+            # Already not completed, just move it if needed?
+            # For now, if it's already in pending/draft/active, we just return it.
+            # But the user asked specifically to 'restore from completed'.
+            current_status = "unknown"
+            for s in ["pending", "draft", "active"]:
+                if s in str(issue_file):
+                    current_status = s
+
+            if current_status == to_status:
+                issues = self.load_mission()
+                for i in issues:
+                    if i.slug == slug:
+                        return i
+
+        # Perform the move
+        is_dir_based = issue_file.name == "README.md"
+        source = issue_file.parent if is_dir_based else issue_file
+        dest = self.issues_root / to_status / source.name
+
+        shutil.move(str(source), str(dest))
+
+        # Add back to mission USV
+        issues = self.load_mission()
+        # Remove if somehow already there (shouldn't be)
+        issues = [i for i in issues if i.slug != slug]
+
+        # Extract deps
+        final_file = dest / "README.md" if is_dir_based else dest
+        deps = self.extract_deps(final_file)
+
+        new_issue = Issue(
+            slug=slug, status=to_status, priority=len(issues) + 1, dependencies=deps
+        )
+        issues.append(new_issue)
+        self.save_mission(issues)
+        self.sync_mission()
+
+        return new_issue
 
     def load_mission(self) -> List[Issue]:
         if not self.mission_path.exists():

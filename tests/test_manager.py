@@ -51,6 +51,25 @@ def test_api_complete_issue(manager):
     assert (manager.issues_root / "completed" / year / "complete-me.md").exists()
 
 
+def test_api_restore_issue(manager):
+    manager.create_issue("Restore Me")
+    manager.complete_issue("restore-me", should_commit=False)
+
+    # Verify it is in completed
+    year = str(datetime.now().year)
+    assert (manager.issues_root / "completed" / year / "restore-me.md").exists()
+
+    # Restore it
+    manager.restore_issue("restore-me", to_status="active")
+
+    assert (manager.issues_root / "active" / "restore-me.md").exists()
+    assert not (manager.issues_root / "completed" / year / "restore-me.md").exists()
+
+    issues = manager.load_mission()
+    issue = next(i for i in issues if i.slug == "restore-me")
+    assert issue.status == "active"
+
+
 def test_api_sync_mission(manager):
     manager.create_issue("Task A", draft=True)
     manager.create_issue("Task B", draft=False)
