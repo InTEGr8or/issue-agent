@@ -63,16 +63,20 @@ class TaskAgent:
 
     @staticmethod
     def slugify(text: str) -> str:
-        """Convert text to a slug."""
+        """Convert text to a slug. Converts underscores and spaces to hyphens."""
         text = text.lower()
+        # Remove everything except alphanumeric, spaces, underscores, and hyphens.
         text = re.sub(r"[^\w\s-]", "", text)
-        text = re.sub(r"[\s_-]+", "-", text)
+        # Convert both spaces and underscores to hyphens
+        text = re.sub(r"[\s_]+", "-", text)
+        # Collapse multiple hyphens
+        text = re.sub(r"[-]+", "-", text)
         return text.strip("-")
 
     def find_issue_file(self, slug: str) -> Optional[Path]:
         """Find the issue markdown file by slug.
         Checks for slug.md OR slug/README.md.
-        """
+        Resilient to underscore/hyphen differences."""
         if not self.issues_root.exists():
             return None
 
@@ -82,16 +86,29 @@ class TaskAgent:
             if d.is_dir() and d.name != "completed"
         ]
 
+        # Normalize target slug
+        target_slug = self.slugify(slug)
+
         for directory in search_dirs:
-            # 1. Check for file-based issue: slug.md
+            # 1. Exact match check (fast)
             issue_file = directory / f"{slug}.md"
             if issue_file.exists():
                 return issue_file
 
-            # 2. Check for directory-based issue: slug/README.md
             issue_dir_file = directory / slug / "README.md"
             if issue_dir_file.exists():
                 return issue_dir_file
+
+            # 2. Resilient check (slugify existing files)
+            for f in directory.glob("*.md"):
+                if self.slugify(f.stem) == target_slug:
+                    return f
+
+            for d in directory.iterdir():
+                if d.is_dir():
+                    readme = d / "README.md"
+                    if readme.exists() and self.slugify(d.name) == target_slug:
+                        return readme
 
         return None
 

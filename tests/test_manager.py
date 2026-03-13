@@ -20,6 +20,25 @@ def test_api_create_issue(manager):
     assert "Body from API" in file.read_text()
 
 
+def test_slugify_underscores(manager):
+    assert manager.slugify("Issue_with_underscore") == "issue-with-underscore"
+    assert manager.slugify("Issue with spaces") == "issue-with-spaces"
+    assert manager.slugify("Mixed-Style_test") == "mixed-style-test"
+
+
+def test_find_issue_file_resilient(manager):
+    # Create a file with underscores manually
+    pending_dir = manager.issues_root / "pending"
+    pending_dir.mkdir(parents=True, exist_ok=True)
+    file_with_underscores = pending_dir / "my_test_issue.md"
+    file_with_underscores.write_text("# My Test Issue")
+
+    # Try to find it using hyphenated slug
+    found = manager.find_issue_file("my-test-issue")
+    assert found is not None
+    assert found.name == "my_test_issue.md"
+
+
 def test_api_complete_issue(manager):
     manager.create_issue("Complete Me")
     # complete_issue returns (issue, commit_hash)
