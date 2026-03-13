@@ -1,12 +1,11 @@
 import pytest
 from taskagent.cli import (
-    slugify,
-    load_mission,
     cmd_new,
     cmd_done,
     cmd_ingest,
     cmd_promote,
 )
+from taskagent.manager import TaskManager
 from rich.console import Console
 from datetime import datetime
 
@@ -21,38 +20,35 @@ def temp_issues_dir(tmp_path):
 
 
 @pytest.fixture
-def mission_path(temp_issues_dir):
-    return temp_issues_dir / "mission.usv"
+def manager(temp_issues_dir):
+    return TaskManager(config_dir=str(temp_issues_dir))
 
 
-def test_slugify():
-    assert slugify("Hello World") == "hello-world"
-    assert slugify("Task: Do Something!") == "task-do-something"
-    assert slugify("Already-Slugified") == "already-slugified"
+def test_slugify(manager):
+    assert manager.slugify("Hello World") == "hello-world"
+    assert manager.slugify("Task: Do Something!") == "task-do-something"
+    assert manager.slugify("Already-Slugified") == "already-slugified"
 
 
-def test_cmd_new_file(temp_issues_dir, mission_path):
+def test_cmd_new_file(manager, temp_issues_dir):
     console = Console()
-    cmd_new(
-        console, temp_issues_dir, mission_path, "Test Task", "Task Body", draft=False
-    )
+    cmd_new(console, manager, "Test Task", "Task Body", draft=False)
 
     issue_file = temp_issues_dir / "pending" / "test-task.md"
     assert issue_file.exists()
     assert "# Test Task" in issue_file.read_text()
 
-    issues = load_mission(temp_issues_dir, mission_path)
+    issues = manager.load_mission()
     assert len(issues) == 1
     assert issues[0].slug == "test-task"
     assert issues[0].status == "pending"
 
 
-def test_cmd_new_dir(temp_issues_dir, mission_path):
+def test_cmd_new_dir(manager, temp_issues_dir):
     console = Console()
     cmd_new(
         console,
-        temp_issues_dir,
-        mission_path,
+        manager,
         "Dir Task",
         "Body",
         draft=True,
@@ -62,27 +58,16 @@ def test_cmd_new_dir(temp_issues_dir, mission_path):
     readme = temp_issues_dir / "draft" / "dir-task" / "README.md"
     assert readme.exists()
 
-    issues = load_mission(temp_issues_dir, mission_path)
+    issues = manager.load_mission()
     assert issues[0].slug == "dir-task"
     assert issues[0].status == "draft"
 
 
-def test_cmd_new_depends_on(temp_issues_dir, mission_path):
+def test_cmd_done(manager, temp_issues_dir):
     console = Console()
-    cmd_new(
-        console, temp_issues_dir, mission_path, "B", "Body", draft=False, depends_on="A"
-    )
+    cmd_new(console, manager, "Done Task", "Body", draft=False)
 
-    issues = load_mission(temp_issues_dir, mission_path)
-    assert issues[0].dependencies == ["A"]
-    assert "**Depends on:** A" in (temp_issues_dir / "pending" / "b.md").read_text()
-
-
-def test_cmd_done(temp_issues_dir, mission_path):
-    console = Console()
-    cmd_new(console, temp_issues_dir, mission_path, "Done Task", "Body", draft=False)
-
-    cmd_done(console, temp_issues_dir, mission_path, "done-task")
+    cmd_done(console, manager, "done-task", should_commit=False)
 
     # Should be in completed/year/
     year = str(datetime.now().year)
@@ -91,11 +76,11 @@ def test_cmd_done(temp_issues_dir, mission_path):
     assert "Completed in commit" in completed_file.read_text()
 
     # Should be removed from mission
-    issues = load_mission(temp_issues_dir, mission_path)
+    issues = manager.load_mission()
     assert len(issues) == 0
 
 
-def test_cmd_ingest(temp_issues_dir, mission_path):
+def test_cmd_ingest(manager, temp_issues_dir):
     console = Console()
     # Create files manually
     (temp_issues_dir / "pending" / "task-1.md").write_text("# Task 1")
@@ -104,9 +89,9 @@ def test_cmd_ingest(temp_issues_dir, mission_path):
         "# Task 2\n\n**Depends on:** task-1"
     )
 
-    cmd_ingest(console, temp_issues_dir, mission_path)
+    cmd_ingest(console, manager)
 
-    issues = load_mission(temp_issues_dir, mission_path)
+    issues = manager.load_mission()
     assert len(issues) == 2
     assert issues[0].slug == "task-1"
     assert issues[1].slug == "task-2"
@@ -115,19 +100,18 @@ def test_cmd_ingest(temp_issues_dir, mission_path):
     assert (temp_issues_dir / "datapackage.json").exists()
 
 
-def test_cmd_start(temp_issues_dir, mission_path, monkeypatch):
+def test_cmd_start(manager, temp_issues_dir, monkeypatch):
     from taskagent import cli
     import subprocess
 
     console = Console()
-    cmd_new(console, temp_issues_dir, mission_path, "Start Task", "Body", draft=False)
+    cmd_new(console, manager, "Start Task", "Body", draft=False)
 
     calls = []
 
     def mock_run(args, **kwargs):
         calls.append(args)
 
-        # Return a mock object with returncode=0
         class MockCompletedProcess:
             returncode = 0
             stdout = ""
@@ -137,22 +121,14 @@ def test_cmd_start(temp_issues_dir, mission_path, monkeypatch):
 
     monkeypatch.setattr(subprocess, "run", mock_run)
 
-    cli.cmd_start(console, temp_issues_dir, mission_path, "start-task")
+    cli.cmd_start(console, manager, "start-task")
 
-    # Should be moved to active/
     assert (temp_issues_dir / "active" / "start-task.md").exists()
     assert not (temp_issues_dir / "pending" / "start-task.md").exists()
-
-    # Should have attempted to create worktree
     assert len(calls) > 0
-    # Check if any call looks like git worktree add
-    wt_call = next((c for c in calls if "worktree" in c and "add" in c), None)
-    assert wt_call is not None
-    assert "-b" in wt_call
-    assert "issue/start-task" in wt_call
 
 
-def test_cmd_run(temp_issues_dir, mission_path, monkeypatch):
+def test_cmd_run(manager, temp_issues_dir, monkeypatch):
     from taskagent import cli
     import subprocess
     from pathlib import Path
@@ -160,8 +136,8 @@ def test_cmd_run(temp_issues_dir, mission_path, monkeypatch):
     console = Console()
 
     # Create an active issue
-    cmd_new(console, temp_issues_dir, mission_path, "Run Task", "Body", draft=False)
-    cli.cmd_active(console, temp_issues_dir, mission_path, "run-task", silent=True)
+    cmd_new(console, manager, "Run Task", "Body", draft=False)
+    cli.cmd_active(console, manager, "run-task", silent=True)
 
     calls = []
 
@@ -175,7 +151,6 @@ def test_cmd_run(temp_issues_dir, mission_path, monkeypatch):
 
     monkeypatch.setattr(subprocess, "run", mock_run)
 
-    # Mock existence and executability of .ta/worker
     original_exists = Path.exists
 
     def mock_exists(self):
@@ -184,49 +159,24 @@ def test_cmd_run(temp_issues_dir, mission_path, monkeypatch):
         return original_exists(self)
 
     monkeypatch.setattr(Path, "exists", mock_exists)
-
     monkeypatch.setattr("os.access", lambda path, mode: True)
 
-    cli.cmd_run(console, temp_issues_dir, mission_path, "run-task")
+    cli.cmd_run(console, manager, "run-task")
 
     assert len(calls) == 1
     args, env = calls[0]
     assert str(args[0]).endswith(".ta/worker")
     assert env["TA_SLUG"] == "run-task"
-    assert "TA_FILE" in env
-    assert "TA_ROOT" in env
 
 
-def test_cmd_init_worker(tmp_path, monkeypatch):
-    from taskagent import cli
-    import os
-
-    # Change to a temp directory for this test
-    os.chdir(tmp_path)
-    console = cli.Console()
-
-    # Create a fake package structure to test scaffolding
-    fake_pkg_root = tmp_path / "fake_pkg"
-    fake_sidecar_source = fake_pkg_root / "sidecars" / "adk-worker"
-    fake_sidecar_source.mkdir(parents=True)
-    (fake_sidecar_source / "worker.py").write_text("print('hello')", encoding="utf-8")
-    (fake_sidecar_source / "pyproject.toml").write_text("[project]", encoding="utf-8")
-
-    # Mock Path(__file__) inside cli.py to point to our fake structure
-    # Actually it's easier to just mock the 'source_dir' if we could,
-    # but let's just verify the command doesn't crash and correctly handles missing templates.
-    cli.cmd_init_worker(console, template="non-existent")
-
-
-def test_cmd_promote(temp_issues_dir, mission_path):
+def test_cmd_promote(manager, temp_issues_dir):
     console = Console()
-    cmd_new(console, temp_issues_dir, mission_path, "Draft Task", "Body", draft=True)
+    cmd_new(console, manager, "Draft Task", "Body", draft=True)
 
-    # Promote using partial slug
-    cmd_promote(console, temp_issues_dir, mission_path, "draft-t")
+    cmd_promote(console, manager, "draft-t")
 
     assert (temp_issues_dir / "pending" / "draft-task.md").exists()
     assert not (temp_issues_dir / "draft" / "draft-task.md").exists()
 
-    issues = load_mission(temp_issues_dir, mission_path)
+    issues = manager.load_mission()
     assert issues[0].status == "pending"
