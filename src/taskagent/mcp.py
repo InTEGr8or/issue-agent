@@ -1,15 +1,15 @@
 from typing import Optional
 from mcp.server.fastmcp import FastMCP
 
-from taskagent.manager import TaskManager
+from taskagent.manager import TaskAgent
 
 # Create an MCP server
 mcp = FastMCP("TaskAgent")
 
 
-def get_manager() -> TaskManager:
+def get_manager() -> TaskAgent:
     """Helper to initialize the manager based on current environment."""
-    return TaskManager()
+    return TaskAgent()
 
 
 @mcp.tool()

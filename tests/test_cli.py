@@ -5,7 +5,7 @@ from taskagent.cli import (
     cmd_ingest,
     cmd_promote,
 )
-from taskagent.manager import TaskManager
+from taskagent.manager import TaskAgent
 from rich.console import Console
 from datetime import datetime
 
@@ -21,7 +21,7 @@ def temp_issues_dir(tmp_path):
 
 @pytest.fixture
 def manager(temp_issues_dir):
-    return TaskManager(config_dir=str(temp_issues_dir))
+    return TaskAgent(config_dir=str(temp_issues_dir))
 
 
 def test_slugify(manager):

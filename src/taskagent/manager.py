@@ -9,7 +9,7 @@ import shutil
 from taskagent.models.issue import Issue, USV_DELIM
 
 
-class TaskManager:
+class TaskAgent:
     def __init__(self, config_dir: Optional[str] = None):
         self.issues_root, self.mission_path = self.get_config_paths(config_dir)
         self.ensure_issues_dir()

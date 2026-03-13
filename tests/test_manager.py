@@ -1,12 +1,12 @@
 import pytest
-from taskagent.manager import TaskManager
+from taskagent.manager import TaskAgent
 from datetime import datetime
 
 
 @pytest.fixture
 def manager(tmp_path):
     issues_root = tmp_path / "docs" / "issues"
-    return TaskManager(config_dir=str(issues_root))
+    return TaskAgent(config_dir=str(issues_root))
 
 
 def test_api_create_issue(manager):

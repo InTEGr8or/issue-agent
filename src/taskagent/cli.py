@@ -18,7 +18,7 @@ import termios
 from rich.live import Live
 
 from taskagent.models.issue import Issue
-from taskagent.manager import TaskManager
+from taskagent.manager import TaskAgent
 
 
 def get_tool_version() -> str:
@@ -131,7 +131,7 @@ def select_issue(
     return next(i for i in matches if i.slug == selected_slug)
 
 
-def cmd_next(console: Console, manager: TaskManager):
+def cmd_next(console: Console, manager: TaskAgent):
     """Show the top issue."""
     next_issue = manager.get_next_issue()
     if not next_issue:
@@ -170,7 +170,7 @@ def cmd_next(console: Console, manager: TaskManager):
 
 def cmd_done(
     console: Console,
-    manager: TaskManager,
+    manager: TaskAgent,
     slug_part: Optional[str] = None,
     commit_message: Optional[str] = None,
     should_commit: bool = True,
@@ -215,7 +215,7 @@ def cmd_done(
 
 def cmd_new(
     console: Console,
-    manager: TaskManager,
+    manager: TaskAgent,
     title: str,
     body: str,
     draft: bool,
@@ -237,7 +237,7 @@ def cmd_new(
 
 def cmd_list(
     console: Console,
-    manager: TaskManager,
+    manager: TaskAgent,
     output_format: str = "table",
 ):
     """List all issues in mission.usv."""
@@ -344,7 +344,7 @@ def cmd_list(
     console.print(table)
 
 
-def cmd_ingest(console: Console, manager: TaskManager):
+def cmd_ingest(console: Console, manager: TaskAgent):
     """Ingest existing markdown files into mission.usv."""
     num_new, num_removed = manager.ingest_issues()
     console.print(
@@ -375,7 +375,7 @@ def cmd_ingest(console: Console, manager: TaskManager):
     console.print(f"[bold green]Updated {dp_path}[/bold green]")
 
 
-def cmd_promote(console: Console, manager: TaskManager, slug_part: str):
+def cmd_promote(console: Console, manager: TaskAgent, slug_part: str):
     """Promote an issue from draft to pending."""
     issues = manager.load_mission()
     target = select_issue(console, issues, slug_part, status_filter=["draft"])
@@ -393,7 +393,7 @@ def cmd_promote(console: Console, manager: TaskManager, slug_part: str):
 
 def cmd_active(
     console: Console,
-    manager: TaskManager,
+    manager: TaskAgent,
     slug_part: Optional[str] = None,
     silent: bool = False,
 ) -> Optional[Issue]:
@@ -424,7 +424,7 @@ def cmd_active(
         return None
 
 
-def cmd_start(console: Console, manager: TaskManager, slug_part: Optional[str] = None):
+def cmd_start(console: Console, manager: TaskAgent, slug_part: Optional[str] = None):
     """Move an issue to active and set up a git worktree."""
     target = cmd_active(console, manager, slug_part, silent=False)
     if not target:
@@ -458,7 +458,7 @@ def cmd_start(console: Console, manager: TaskManager, slug_part: Optional[str] =
 
 
 def cmd_prioritize(
-    console: Console, manager: TaskManager, slug_part: str, direction: str
+    console: Console, manager: TaskAgent, slug_part: str, direction: str
 ):
     """Move an issue up or down in priority."""
     issues = manager.load_mission()
@@ -495,7 +495,7 @@ def cmd_self_up(console: Console):
             console.print("  [cyan]uv tool upgrade task-agent[/cyan]\n")
 
 
-def cmd_run(console: Console, manager: TaskManager, slug_part: Optional[str] = None):
+def cmd_run(console: Console, manager: TaskAgent, slug_part: Optional[str] = None):
     """Run the sidecar worker for an issue."""
     issues = manager.load_mission()
     target = select_issue(console, issues, slug_part, status_filter=["active"])
@@ -668,7 +668,7 @@ def cmd_version(
         console.print(f"[red]Error: {e}[/red]")
 
 
-def cmd_triage(console: Console, manager: TaskManager):
+def cmd_triage(console: Console, manager: TaskAgent):
     """Interactively reorder and promote tasks."""
     issues = manager.sync_mission()
     if not issues:
@@ -751,7 +751,7 @@ def cmd_triage(console: Console, manager: TaskManager):
                         pass
 
 
-def display_overview(console: Console, manager: TaskManager):
+def display_overview(console: Console, manager: TaskAgent):
     """Display a rich overview of the task agent state and available commands."""
     v = get_tool_version()
     console.print(
@@ -878,7 +878,7 @@ def main():
         console.print(f"task-agent version {get_tool_version()}")
         return
 
-    manager = TaskManager(args.config_dir)
+    manager = TaskAgent(args.config_dir)
 
     if args.command == "next":
         cmd_next(console, manager)

@@ -2,10 +2,10 @@ import os
 import json
 from pathlib import Path
 from typing import Optional
-from taskagent.manager import TaskManager
+from taskagent.manager import TaskAgent
 
 
-def discover(start_path: Optional[Path] = None) -> TaskManager:
+def discover(start_path: Optional[Path] = None) -> TaskAgent:
     """
     Standard discovery mechanism for task-agent.
 
@@ -15,10 +15,10 @@ def discover(start_path: Optional[Path] = None) -> TaskManager:
     3. docs/issues/ directory in start_path or any parent.
 
     Returns:
-        TaskManager: Initialized manager for the discovered instance.
+        TaskAgent: Initialized manager for the discovered instance.
     """
     if os.environ.get("TA_CONFIG_DIR"):
-        return TaskManager()
+        return TaskAgent()
 
     current = Path(start_path or Path.cwd()).absolute()
 
@@ -29,14 +29,14 @@ def discover(start_path: Optional[Path] = None) -> TaskManager:
             try:
                 config = json.loads(config_file.read_text())
                 if "issues_dir" in config:
-                    return TaskManager(config_dir=str(current / config["issues_dir"]))
+                    return TaskAgent(config_dir=str(current / config["issues_dir"]))
             except Exception:
                 pass
 
         # Check for standard folder
         issues_dir = current / "docs" / "issues"
         if issues_dir.exists() and issues_dir.is_dir():
-            return TaskManager(config_dir=str(issues_dir))
+            return TaskAgent(config_dir=str(issues_dir))
 
         # Move up
         parent = current.parent
@@ -45,4 +45,4 @@ def discover(start_path: Optional[Path] = None) -> TaskManager:
         current = parent
 
     # Fallback to default (which will create docs/issues in current dir if not found)
-    return TaskManager()
+    return TaskAgent()

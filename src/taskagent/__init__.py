@@ -1,5 +1,5 @@
-from taskagent.manager import TaskManager
+from taskagent.manager import TaskAgent
 from taskagent.models.issue import Issue
 from taskagent.discovery import discover
 
-__all__ = ["TaskManager", "Issue", "discover"]
+__all__ = ["TaskAgent", "Issue", "discover"]
