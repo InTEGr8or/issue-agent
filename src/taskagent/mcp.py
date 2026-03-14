@@ -104,17 +104,20 @@ def mark_task_active(name: str) -> str:
 
 
 @mcp.tool()
-def complete_task(name: str, message: Optional[str] = None) -> str:
+def complete_task(name: str, solution: str, message: Optional[str] = None) -> str:
     """Mark a task as completed and commit the changes.
 
     Args:
         name: The title or partial name of the task to complete.
+        solution: Clear explanation of what was implemented or fixed.
         message: Optional git commit message.
     """
     manager = get_manager()
     slug = manager.slugify(name)
     try:
-        issue, commit_hash = manager.complete_issue(slug, commit_message=message)
+        issue, commit_hash = manager.complete_issue(
+            slug, commit_message=message, solution_explanation=solution
+        )
         return f"Task '{slug}' completed. Commit: {commit_hash}"
     except Exception as e:
         return f"Error completing task: {e}"

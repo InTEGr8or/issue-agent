@@ -49,9 +49,13 @@ def test_mcp_complete_task(mock_manager):
         "abc1234",
     )
 
-    result = mcp.complete_task("Task 1", message="Done")
+    result = mcp.complete_task(
+        "Task 1", solution="Implemented feature X", message="Done"
+    )
     assert "Task 'task-1' completed. Commit: abc1234" in result
-    mock_manager.complete_issue.assert_called_once_with("task-1", commit_message="Done")
+    mock_manager.complete_issue.assert_called_once_with(
+        "task-1", commit_message="Done", solution_explanation="Implemented feature X"
+    )
 
 
 def test_mcp_search_task(mock_manager, tmp_path):

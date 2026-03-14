@@ -208,6 +208,7 @@ def cmd_done(
     commit_message: Optional[str] = None,
     should_commit: bool = True,
     push: bool = False,
+    solution_explanation: Optional[str] = None,
 ):
     """Mark an issue as done."""
     issues = manager.load_mission()
@@ -222,7 +223,11 @@ def cmd_done(
 
     try:
         _, code_hash = manager.complete_issue(
-            target_issue.slug, commit_message, should_commit, push_mission=push
+            target_issue.slug,
+            commit_message,
+            should_commit,
+            push_mission=push,
+            solution_explanation=solution_explanation,
         )
         console.print(
             f"[bold green]Issue '{target_issue.slug}' marked as done and removed from mission.usv[/bold green]"
@@ -1193,6 +1198,7 @@ def main():
     done_parser = subparsers.add_parser("done")
     done_parser.add_argument("slug", nargs="?")
     done_parser.add_argument("-m", "--message")
+    done_parser.add_argument("-s", "--solution", help="Solution explanation")
     done_parser.add_argument("--no-commit", action="store_true")
     done_parser.add_argument(
         "--push", action="store_true", help="Push the mission repo after completion"
@@ -1271,6 +1277,7 @@ def main():
             args.message,
             not args.no_commit,
             args.push,
+            args.solution,
         )
     elif args.command == "new":
         cmd_new(

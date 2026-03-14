@@ -428,6 +428,7 @@ class TaskAgent:
         commit_message: Optional[str] = None,
         should_commit: bool = True,
         push_mission: bool = False,
+        solution_explanation: Optional[str] = None,
     ) -> Tuple[Issue, str]:
         """Mark an issue as done. Returns (issue, commit_hash)."""
         issues = self.load_mission()
@@ -457,6 +458,10 @@ class TaskAgent:
 
         if not content.endswith("\n"):
             content += "\n"
+
+        if solution_explanation:
+            content += f"\n## Solution\n\n{solution_explanation}\n"
+
         content += "\n---\n**Completed in commit:** `<pending-commit-id>`\n"
 
         # 3. Execute Move and USV update (Mission Repo)
