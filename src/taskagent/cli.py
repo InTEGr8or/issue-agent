@@ -313,7 +313,12 @@ def cmd_eject_mission(console: Console, manager: TaskAgent, public: bool = False
 
     try:
         # 1. Verify GH CLI
-        subprocess.run(["gh", "--version"], check=True, capture_output=True)
+        subprocess.run(
+            ["gh", "--version"],
+            check=True,
+            capture_output=True,
+            shell=(os.name == "nt"),
+        )
 
         # 2. Create target and move files
         target_path.mkdir(parents=True)
@@ -321,10 +326,16 @@ def cmd_eject_mission(console: Console, manager: TaskAgent, public: bool = False
             shutil.move(str(item), str(target_path / item.name))
 
         # 3. Git Init and Create Repo
-        subprocess.run(["git", "-C", str(target_path), "init"], check=True)
+        subprocess.run(
+            ["git", "-C", str(target_path), "init"], check=True, shell=(os.name == "nt")
+        )
 
         # Add everything
-        subprocess.run(["git", "-C", str(target_path), "add", "."], check=True)
+        subprocess.run(
+            ["git", "-C", str(target_path), "add", "."],
+            check=True,
+            shell=(os.name == "nt"),
+        )
         subprocess.run(
             [
                 "git",
@@ -335,6 +346,7 @@ def cmd_eject_mission(console: Console, manager: TaskAgent, public: bool = False
                 "chore: initial mission control commit",
             ],
             check=True,
+            shell=(os.name == "nt"),
         )
 
         # gh repo create
@@ -355,6 +367,7 @@ def cmd_eject_mission(console: Console, manager: TaskAgent, public: bool = False
             ],
             cwd=str(target_path),
             check=True,
+            shell=(os.name == "nt"),
         )
 
         # 4. Remove old dir and Symlink
@@ -644,6 +657,7 @@ def cmd_start(console: Console, manager: TaskAgent, slug_part: Optional[str] = N
             check=True,
             capture_output=True,
             text=True,
+            shell=(os.name == "nt"),
         )
         console.print(f"[bold green]Successfully started issue '{slug}'.[/bold green]")
     except subprocess.CalledProcessError as e:
@@ -670,7 +684,9 @@ def cmd_self_up(console: Console):
     """Upgrade task-agent tool."""
     console.print("[blue]Upgrading task-agent via uv...[/blue]")
     try:
-        subprocess.run(["uv", "tool", "upgrade", "task-agent"], check=True)
+        subprocess.run(
+            ["uv", "tool", "upgrade", "task-agent"], check=True, shell=(os.name == "nt")
+        )
         console.print("[bold green]Successfully upgraded task-agent.[/bold green]")
     except subprocess.CalledProcessError as e:
         console.print(f"[red]Error upgrading task-agent: {e}[/red]")
@@ -700,7 +716,8 @@ def cmd_run(console: Console, manager: TaskAgent, slug_part: Optional[str] = Non
         return
 
     issue_file = manager.find_issue_file(target.slug)
-    worker_executable = Path(".ta") / "worker"
+    worker_ext = ".bat" if os.name == "nt" else ""
+    worker_executable = Path(".ta") / f"worker{worker_ext}"
     if not worker_executable.exists():
         console.print(f"[red]Sidecar worker not found at {worker_executable}[/red]")
         console.print("[blue]Run 'ta init-worker' to set up a reference worker.[/blue]")
@@ -712,7 +729,12 @@ def cmd_run(console: Console, manager: TaskAgent, slug_part: Optional[str] = Non
     env["TA_ROOT"] = str(Path.cwd().absolute())
 
     try:
-        subprocess.run([str(worker_executable.absolute())], env=env, check=True)
+        subprocess.run(
+            [str(worker_executable.absolute())],
+            env=env,
+            check=True,
+            shell=(os.name == "nt"),
+        )
         console.print(
             f"[bold green]Worker for '{target.slug}' finished successfully.[/bold green]"
         )
@@ -767,10 +789,15 @@ def cmd_init_worker(console: Console, template: str = "adk"):
         if item.is_file():
             shutil.copy(str(item), str(target_sidecar_dir / item.name))
 
-    worker_script = target_ta_dir / "worker"
-    script_content = f"#!/usr/bin/env bash\nuv run --project {target_sidecar_dir} python {target_sidecar_dir}/worker.py\n"
+    worker_script = target_ta_dir / ("worker.bat" if os.name == "nt" else "worker")
+    if os.name == "nt":
+        script_content = f"@echo off\nuv run --project {target_sidecar_dir} python {target_sidecar_dir}/worker.py %*\n"
+    else:
+        script_content = f'#!/usr/bin/env bash\nuv run --project {target_sidecar_dir} python {target_sidecar_dir}/worker.py "$@"\n'
+
     worker_script.write_text(script_content, encoding="utf-8")
-    worker_script.chmod(0o755)
+    if os.name != "nt":
+        worker_script.chmod(0o755)
     console.print(
         f"[bold green]Successfully initialized {template} worker![/bold green]"
     )
@@ -803,7 +830,7 @@ def cmd_init_mcp(console: Console, scope: str = "project"):
     ]
 
     try:
-        subprocess.run(command, check=True)
+        subprocess.run(command, check=True, shell=(os.name == "nt"))
         console.print(
             "[bold green]Successfully registered Task Agent MCP server![/bold green]"
         )
@@ -834,12 +861,18 @@ def cmd_version(
                 return
             tag_name = f"v{v}"
             console.print(f"[blue]Tagging current commit as {tag_name}...[/blue]")
-            subprocess.run(["git", "tag", tag_name], check=True)
+            subprocess.run(
+                ["git", "tag", tag_name], check=True, shell=(os.name == "nt")
+            )
             console.print(f"[bold green]Tagged commit as {tag_name}[/bold green]")
 
             if push:
                 console.print(f"[blue]Pushing tag {tag_name} to origin...[/blue]")
-                subprocess.run(["git", "push", "origin", tag_name], check=True)
+                subprocess.run(
+                    ["git", "push", "origin", tag_name],
+                    check=True,
+                    shell=(os.name == "nt"),
+                )
                 console.print(
                     f"[bold green]Successfully pushed {tag_name}[/bold green]"
                 )
@@ -858,12 +891,15 @@ def cmd_version(
                         "--no-tag",
                     ],
                     check=True,
+                    shell=(os.name == "nt"),
                 )
                 if Path("uv.lock").exists():
-                    subprocess.run(["uv", "lock"], check=True)
+                    subprocess.run(["uv", "lock"], check=True, shell=(os.name == "nt"))
             elif source == "package.json":
                 subprocess.run(
-                    ["npm", "version", promote, "--no-git-tag-version"], check=True
+                    ["npm", "version", promote, "--no-git-tag-version"],
+                    check=True,
+                    shell=(os.name == "nt"),
                 )
             new_v, _ = get_project_version()
             console.print(f"[bold green]Promoted to version {new_v}[/bold green]")

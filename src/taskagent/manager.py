@@ -27,6 +27,7 @@ class TaskAgent:
                 capture_output=True,
                 text=True,
                 check=True,
+                shell=(os.name == "nt"),
             )
             return Path(res.stdout.strip())
         except subprocess.CalledProcessError:
@@ -43,7 +44,11 @@ class TaskAgent:
         """Push changes in the mission repository."""
         if not self.mission_root:
             return
-        subprocess.run(["git", "-C", str(self.mission_root), "push"], check=True)
+        subprocess.run(
+            ["git", "-C", str(self.mission_root), "push"],
+            check=True,
+            shell=(os.name == "nt"),
+        )
 
     def _set_writable(self, path: Path, writable: bool):
         """Toggle the filesystem write bit for a file."""
@@ -304,6 +309,7 @@ class TaskAgent:
                 ["git", "rev-parse", "--short", "HEAD"],
                 stderr=subprocess.DEVNULL,
                 text=True,
+                shell=(os.name == "nt"),
             ).strip()
         except subprocess.CalledProcessError:
             return "unknown"
@@ -450,23 +456,43 @@ class TaskAgent:
         """Helper to perform a git commit with retry logic for hooks."""
         if files:
             for f in files:
-                subprocess.run(["git", "-C", str(repo_root), "add", f], check=False)
+                subprocess.run(
+                    ["git", "-C", str(repo_root), "add", f],
+                    check=False,
+                    shell=(os.name == "nt"),
+                )
         else:
-            subprocess.run(["git", "-C", str(repo_root), "add", "."], check=False)
+            subprocess.run(
+                ["git", "-C", str(repo_root), "add", "."],
+                check=False,
+                shell=(os.name == "nt"),
+            )
 
         cmd = ["git", "-C", str(repo_root), "commit", "-m", message]
         if amend:
             cmd = ["git", "-C", str(repo_root), "commit", "--amend", "--no-edit"]
 
-        res = subprocess.run(cmd, capture_output=True, text=True)
+        res = subprocess.run(
+            cmd, capture_output=True, text=True, shell=(os.name == "nt")
+        )
         if res.returncode != 0 and not amend:
             # Retry once for pre-commit hooks
             if files:
                 for f in files:
-                    subprocess.run(["git", "-C", str(repo_root), "add", f], check=False)
+                    subprocess.run(
+                        ["git", "-C", str(repo_root), "add", f],
+                        check=False,
+                        shell=(os.name == "nt"),
+                    )
             else:
-                subprocess.run(["git", "-C", str(repo_root), "add", "."], check=False)
-            res = subprocess.run(cmd, capture_output=True, text=True)
+                subprocess.run(
+                    ["git", "-C", str(repo_root), "add", "."],
+                    check=False,
+                    shell=(os.name == "nt"),
+                )
+            res = subprocess.run(
+                cmd, capture_output=True, text=True, shell=(os.name == "nt")
+            )
 
         if res.returncode == 0:
             try:
@@ -474,6 +500,7 @@ class TaskAgent:
                     ["git", "-C", str(repo_root), "rev-parse", "--short", "HEAD"],
                     stderr=subprocess.DEVNULL,
                     text=True,
+                    shell=(os.name == "nt"),
                 ).strip()
             except Exception:
                 return "unknown"
