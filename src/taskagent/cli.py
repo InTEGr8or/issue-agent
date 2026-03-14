@@ -549,33 +549,7 @@ def cmd_list(
 
 def cmd_ingest(console: Console, manager: TaskAgent):
     """Ingest existing markdown files into mission.usv."""
-    num_new, num_removed = manager.ingest_issues()
-    console.print(
-        f"[bold green]Ingested {num_new} new issues, removed {num_removed} missing ones.[/bold green]"
-    )
-
-    # Datapackage sync logic
-    datapackage = {
-        "name": "mission-control",
-        "resources": [
-            {
-                "name": "mission",
-                "path": "mission.usv",
-                "format": "csv",
-                "delimiter": "\u001f",
-                "schema": {
-                    "fields": [
-                        {"name": "slug", "type": "string"},
-                        {"name": "dependencies", "type": "string"},
-                    ]
-                },
-            }
-        ],
-    }
-    dp_path = manager.issues_root / "datapackage.json"
-    with dp_path.open("w", encoding="utf-8") as f:
-        json.dump(datapackage, f, indent=2)
-    console.print(f"[bold green]Updated {dp_path}[/bold green]")
+    cmd_init(console, manager)
 
 
 def cmd_promote(console: Console, manager: TaskAgent, slug_part: str):
@@ -744,6 +718,20 @@ def cmd_run(console: Console, manager: TaskAgent, slug_part: Optional[str] = Non
         )
     except Exception as e:
         console.print(f"[red]Worker failed: {e}[/red]")
+
+
+def cmd_init(console: Console, manager: TaskAgent):
+    """Initialize or heal the project."""
+    console.print("[blue]Initializing Task Agent project...[/blue]")
+    num_new, num_removed = manager.init_project()
+    console.print(
+        f"[bold green]Task Agent initialized at {manager.issues_root}[/bold green]"
+    )
+    if num_new > 0 or num_removed > 0:
+        console.print(
+            f"[dim]Ingested {num_new} new issues, removed {num_removed} missing ones.[/dim]"
+        )
+    console.print("[dim]Mission files are protected (Read-Only).[/dim]")
 
 
 def cmd_init_worker(console: Console, template: str = "adk"):
@@ -1138,6 +1126,7 @@ def display_overview(console: Console, manager: TaskAgent):
         ("new", "Create a new task"),
         ("start", "Start a task (creates branch & worktree)"),
         ("done", "Complete a task (moves file & commits)"),
+        ("init", "Initialize or heal the Task Agent project"),
         ("push", "Push the mission repository to origin"),
         ("eject-mission", "Move mission queue to a separate repository"),
         ("", ""),  # Spacer
@@ -1171,6 +1160,7 @@ def main():
     subparsers = parser.add_subparsers(dest="command")
 
     subparsers.add_parser("next")
+    subparsers.add_parser("init", help="Initialize or heal the project")
     triage_parser = subparsers.add_parser(
         "triage", help="Interactively reorder and promote tasks"
     )
@@ -1270,6 +1260,8 @@ def main():
 
     if args.command == "next":
         cmd_next(console, manager)
+    elif args.command == "init":
+        cmd_init(console, manager)
     elif args.command == "triage":
         cmd_triage(console, manager, search_query=args.search)
     elif args.command == "restore":

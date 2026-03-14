@@ -2,6 +2,9 @@
 
 This directory contains the core data for the Task Agent queue.
 
+> [!CAUTION]
+> `mission.usv` and `datapackage.json` are managed by the `ta` CLI and are protected with a Read-Only attribute. **Do not attempt to edit them manually.** Use `ta` commands (e.g., `ta new`, `ta ingest`, `ta up/down`) to modify the queue.
+
 ## 📂 Subdirectories
 
 - [**Mission Control**](./mission.usv): The prioritized list of issue slugs.

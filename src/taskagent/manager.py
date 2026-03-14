@@ -5,6 +5,8 @@ import re
 import subprocess
 import os
 import shutil
+import stat
+import json
 
 from taskagent.models.issue import Issue, USV_DELIM
 
@@ -43,6 +45,16 @@ class TaskAgent:
             return
         subprocess.run(["git", "-C", str(self.mission_root), "push"], check=True)
 
+    def _set_writable(self, path: Path, writable: bool):
+        """Toggle the filesystem write bit for a file."""
+        if not path.exists():
+            return
+        current_mode = path.stat().st_mode
+        if writable:
+            os.chmod(path, current_mode | stat.S_IWRITE)
+        else:
+            os.chmod(path, current_mode & ~stat.S_IWRITE)
+
     @staticmethod
     def get_config_paths(config_dir: Optional[str] = None) -> Tuple[Path, Path]:
         """Get the issues root and mission path based on config or environment."""
@@ -58,8 +70,26 @@ class TaskAgent:
 
     def ensure_issues_dir(self):
         """Ensure the issues directory and its subdirectories exist."""
+        self.issues_root.mkdir(parents=True, exist_ok=True)
         for subdir in ["pending", "draft", "active", "completed"]:
             (self.issues_root / subdir).mkdir(parents=True, exist_ok=True)
+
+    def lock_mission_files(self):
+        """Ensure mission.usv and datapackage.json are read-only."""
+        if self.mission_path.exists():
+            self._set_writable(self.mission_path, False)
+        dp_path = self.issues_root / "datapackage.json"
+        if dp_path.exists():
+            self._set_writable(dp_path, False)
+
+    def init_project(self) -> Tuple[int, int]:
+        """Initialize or heal the task agent structure in the current project.
+        Syncs disk state with mission.usv. Returns (num_new, num_removed)."""
+        self.ensure_issues_dir()
+        num_new, num_removed = self.ingest_issues()
+        self.save_datapackage()
+        self.lock_mission_files()
+        return num_new, num_removed
 
     @staticmethod
     def slugify(text: str) -> str:
@@ -209,9 +239,36 @@ class TaskAgent:
     def save_mission(self, issues: List[Issue]):
         """Save the list of issues back to mission.usv."""
         self.mission_path.parent.mkdir(parents=True, exist_ok=True)
+        self._set_writable(self.mission_path, True)
         with self.mission_path.open("w", encoding="utf-8", newline="\n") as f:
             for issue in issues:
                 f.write(issue.to_usv() + "\n")
+        self._set_writable(self.mission_path, False)
+
+    def save_datapackage(self):
+        """Save the datapackage.json file."""
+        datapackage = {
+            "name": "mission-control",
+            "resources": [
+                {
+                    "name": "mission",
+                    "path": "mission.usv",
+                    "format": "csv",
+                    "delimiter": "\u001f",
+                    "schema": {
+                        "fields": [
+                            {"name": "slug", "type": "string"},
+                            {"name": "dependencies", "type": "string"},
+                        ]
+                    },
+                }
+            ],
+        }
+        dp_path = self.issues_root / "datapackage.json"
+        self._set_writable(dp_path, True)
+        with dp_path.open("w", encoding="utf-8") as f:
+            json.dump(datapackage, f, indent=2)
+        self._set_writable(dp_path, False)
 
     def sync_mission(self) -> List[Issue]:
         """Load, sort by status groups, and save back."""
