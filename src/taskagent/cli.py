@@ -848,7 +848,7 @@ def cmd_version(
     console: Console,
     promote: Optional[str] = None,
     tag: bool = False,
-    push: bool = False,
+    push: bool = True,
 ):
     """Show project version, promote it, or tag it."""
     try:
@@ -1283,8 +1283,12 @@ def main():
     p_v.add_argument("part", choices=["major", "minor", "patch"])
     tag_parser = v_sub.add_parser("tag")
     tag_parser.add_argument(
-        "--push", action="store_true", help="Push the tag to origin"
+        "--no-push",
+        dest="push",
+        action="store_false",
+        help="Do not push the tag to origin",
     )
+    tag_parser.set_defaults(push=True)
 
     args = parser.parse_args()
     console = Console()
@@ -1360,7 +1364,7 @@ def main():
         )
     elif args.command == "version":
         if args.version_command == "promote":
-            cmd_version(console, args.part)
+            cmd_version(console, promote=args.part, push=False)
         elif args.version_command == "tag":
             cmd_version(console, tag=True, push=args.push)
         else:
