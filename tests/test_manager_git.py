@@ -17,11 +17,15 @@ def test_git_root_detection(tmp_path, manager):
 
         root = manager._get_git_root(tmp_path)
         assert root == Path("/path/to/repo")
+        # We now use shell=(os.name == "nt")
+        import os
+
         mock_run.assert_called_with(
             ["git", "-C", str(tmp_path), "rev-parse", "--show-toplevel"],
             capture_output=True,
             text=True,
             check=True,
+            shell=(os.name == "nt"),
         )
 
 

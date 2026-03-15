@@ -40,6 +40,7 @@ def test_cmd_new_file(manager, temp_issues_dir):
 
     issues = manager.load_mission()
     assert len(issues) == 1
+    assert issues[0].name == "Test Task"
     assert issues[0].slug == "test-task"
     assert issues[0].status == "pending"
 
@@ -59,6 +60,7 @@ def test_cmd_new_dir(manager, temp_issues_dir):
     assert readme.exists()
 
     issues = manager.load_mission()
+    assert issues[0].name == "Dir Task"
     assert issues[0].slug == "dir-task"
     assert issues[0].status == "draft"
 

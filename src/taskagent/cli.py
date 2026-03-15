@@ -174,7 +174,8 @@ def render_issue(console: Console, issue: Issue, issue_file: Path):
         deps_info = f"[bold blue]DEPENDS ON:[/bold blue] [yellow]{', '.join(issue.dependencies)}[/yellow]\n"
 
     panel = Panel(
-        f"[bold blue]ISSUE:[/bold blue] [cyan]{issue.slug}[/cyan]\n"
+        f"[bold blue]ISSUE:[/bold blue] [cyan]{issue.name}[/cyan]\n"
+        f"[bold blue]SLUG:[/bold blue] {issue.slug} | "
         f"[bold blue]PRIORITY:[/bold blue] {issue.priority} | "
         f"[bold blue]STATUS:[/bold blue] {issue.status}\n"
         f"{deps_info}"
@@ -182,6 +183,7 @@ def render_issue(console: Console, issue: Issue, issue_file: Path):
         title="Task Agent",
         expand=False,
     )
+
     md = Markdown(content)
 
     # Estimate lines: Panel (~6) + Markdown content + some buffer
@@ -506,6 +508,7 @@ def cmd_list(
                 {
                     "priority": i.priority,
                     "status": i.status,
+                    "name": i.name,
                     "slug": i.slug,
                     "dependencies": i.dependencies,
                     "location": location,
@@ -523,13 +526,14 @@ def cmd_list(
             indent = "  " * depth
             prefix = "└─ " if depth > 0 else ""
             console.print(
-                f"{i.priority:<3} {i.status:<8} {indent}{prefix}{i.slug:<30} {deps:<20} {location}"
+                f"{i.priority:<3} {i.status:<8} {i.name:<30} {indent}{prefix}{i.slug:<30} {deps:<20} {location}"
             )
         return
 
     table = Table(title="Task Queue")
     table.add_column("Priority", justify="right", style="cyan")
     table.add_column("Status", style="magenta")
+    table.add_column("Name", style="white")
     table.add_column("Slug", style="green")
     table.add_column("Depends On", style="yellow")
     table.add_column("Location", style="dim")
@@ -553,6 +557,7 @@ def cmd_list(
         table.add_row(
             str(issue.priority),
             status_str,
+            issue.name,
             display_slug,
             ", ".join(issue.dependencies),
             location,
@@ -952,14 +957,20 @@ def cmd_triage(
                         # File-based
                         for f in sorted(year_dir.glob("*.md")):
                             slug = f.stem
+                            name = manager.extract_title(f)
                             all_issues.append(
-                                Issue(slug=slug, status="completed", priority=0)
+                                Issue(
+                                    name=name, slug=slug, status="completed", priority=0
+                                )
                             )
                         # Directory-based
                         for d in sorted(year_dir.glob("*/README.md")):
                             slug = d.parent.name
+                            name = manager.extract_title(d)
                             all_issues.append(
-                                Issue(slug=slug, status="completed", priority=0)
+                                Issue(
+                                    name=name, slug=slug, status="completed", priority=0
+                                )
                             )
             issues = all_issues
         else:

@@ -14,17 +14,25 @@ def mock_manager():
 
 def test_mcp_list_tasks(mock_manager):
     mock_manager.sync_mission.return_value = [
-        Issue(slug="task-1", status="pending", priority=1),
-        Issue(slug="task-2", status="draft", priority=2, dependencies=["task-1"]),
+        Issue(name="Task 1", slug="task-1", status="pending", priority=1),
+        Issue(
+            name="Task 2",
+            slug="task-2",
+            status="draft",
+            priority=2,
+            dependencies=["task-1"],
+        ),
     ]
 
     result = mcp.list_tasks()
-    assert "[1] PENDING: task-1" in result
-    assert "[2] DRAFT: task-2 (depends on: task-1)" in result
+    assert "[1] PENDING: Task 1" in result
+    assert "[2] DRAFT: Task 2 (depends on: task-1)" in result
 
 
 def test_mcp_create_task(mock_manager):
-    mock_manager.create_issue.return_value = Issue(slug="new-task", status="pending")
+    mock_manager.create_issue.return_value = Issue(
+        name="New Task", slug="new-task", status="pending"
+    )
 
     result = mcp.create_task(
         "New Task", completion_criteria="Must pass tests", body="Desc"
@@ -45,7 +53,7 @@ def test_mcp_mark_task_active(mock_manager):
 def test_mcp_complete_task(mock_manager):
     mock_manager.slugify.return_value = "task-1"
     mock_manager.complete_issue.return_value = (
-        Issue(slug="task-1", status="completed"),
+        Issue(name="Task 1", slug="task-1", status="completed"),
         "abc1234",
     )
 
@@ -74,7 +82,9 @@ def test_mcp_search_task(mock_manager, tmp_path):
 
 def test_mcp_restore_task(mock_manager):
     mock_manager.slugify.return_value = "task-1"
-    mock_manager.restore_issue.return_value = Issue(slug="task-1", status="active")
+    mock_manager.restore_issue.return_value = Issue(
+        name="Task 1", slug="task-1", status="active"
+    )
 
     result = mcp.restore_task("Task 1", status="active")
     assert "Task 'task-1' restored to 'active'" in result

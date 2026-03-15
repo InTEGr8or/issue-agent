@@ -20,10 +20,47 @@ def test_api_create_issue(manager):
     assert "Body from API" in file.read_text()
 
 
-def test_slugify_underscores(manager):
-    assert manager.slugify("Issue_with_underscore") == "issue-with-underscore"
-    assert manager.slugify("Issue with spaces") == "issue-with-spaces"
-    assert manager.slugify("Mixed-Style_test") == "mixed-style-test"
+def test_slugify_hashes(manager):
+    assert manager.slugify("# My Title") == "my-title"
+    assert manager.slugify("Issue #123: Fix") == "issue-123-fix"
+    assert manager.slugify("### Heavily Hashed ###") == "heavily-hashed"
+
+
+def test_api_ingest_with_titles(manager):
+    issues_root = manager.issues_root
+    # Create file manually with a specific title
+    (issues_root / "pending" / "task-1.md").write_text("# My Custom Title\nContent")
+
+    # Ingest
+    manager.save_mission([])
+    manager.ingest_issues()
+
+    issues = manager.load_mission()
+    assert issues[0].name == "My Custom Title"
+    assert issues[0].slug == "task-1"
+
+
+def test_mission_file_protection(manager):
+    # Initial state
+    manager.create_issue("Protect Me")
+    manager.save_datapackage()
+    manager.lock_mission_files()
+
+    import os
+    import stat
+
+    # Check read-only bit
+    mode = os.stat(manager.mission_path).st_mode
+    assert not (mode & stat.S_IWRITE)
+
+    dp_path = manager.issues_root / "datapackage.json"
+    mode_dp = os.stat(dp_path).st_mode
+    assert not (mode_dp & stat.S_IWRITE)
+
+    # Test that save_mission can still write (by toggling bit)
+    manager.save_mission(manager.load_mission())
+    # Should still be read-only after operation
+    assert not (os.stat(manager.mission_path).st_mode & stat.S_IWRITE)
 
 
 def test_find_issue_file_resilient(manager):

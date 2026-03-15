@@ -6,6 +6,7 @@ USV_DELIM = "\x1f"
 
 
 class Issue(BaseModel):
+    name: str  # The title or display name
     slug: str
     dependencies: List[str] = []
     # These are derived at runtime, not stored in USV
@@ -14,4 +15,4 @@ class Issue(BaseModel):
 
     def to_usv(self) -> str:
         deps_str = ",".join(self.dependencies)
-        return f"{self.slug}{USV_DELIM}{deps_str}"
+        return f"{self.name}{USV_DELIM}{self.slug}{USV_DELIM}{deps_str}"

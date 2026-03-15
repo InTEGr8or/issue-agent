@@ -191,12 +191,17 @@ class TaskAgent:
         # Remove if somehow already there (shouldn't be)
         issues = [i for i in issues if i.slug != slug]
 
-        # Extract deps
+        # Extract deps and name
         final_file = dest / "README.md" if is_dir_based else dest
         deps = self.extract_deps(final_file)
+        name = self.extract_title(final_file)
 
         new_issue = Issue(
-            slug=slug, status=to_status, priority=len(issues) + 1, dependencies=deps
+            name=name,
+            slug=slug,
+            status=to_status,
+            priority=len(issues) + 1,
+            dependencies=deps,
         )
         issues.append(new_issue)
         self.save_mission(issues)
@@ -217,10 +222,21 @@ class TaskAgent:
                 parts = line.split(USV_DELIM)
                 if len(parts) >= 1:
                     try:
-                        slug = parts[0]
-                        deps = []
-                        if len(parts) >= 2 and parts[1]:
-                            deps = [d.strip() for d in parts[1].split(",") if d.strip()]
+                        if len(parts) == 1:
+                            # Legacy format: slug only
+                            slug = parts[0]
+                            name = slug  # Fallback to slug
+                            deps: List[str] = []
+                        elif len(parts) == 2:
+                            # Transitional or name/slug?
+                            # Let's assume name/slug if we have it now
+                            name = parts[0]
+                            slug = parts[1]
+                            deps = []
+                        else:
+                            name = parts[0]
+                            slug = parts[1]
+                            deps = [d.strip() for d in parts[2].split(",") if d.strip()]
 
                         # Determine status from file location
                         issue_file = self.find_issue_file(slug)
@@ -234,7 +250,11 @@ class TaskAgent:
 
                         issues.append(
                             Issue(
-                                slug=slug, dependencies=deps, priority=i, status=status
+                                name=name,
+                                slug=slug,
+                                dependencies=deps,
+                                priority=i,
+                                status=status,
                             )
                         )
                     except (ValueError, IndexError):
@@ -262,6 +282,7 @@ class TaskAgent:
                     "delimiter": "\u001f",
                     "schema": {
                         "fields": [
+                            {"name": "name", "type": "string"},
                             {"name": "slug", "type": "string"},
                             {"name": "dependencies", "type": "string"},
                         ]
@@ -327,6 +348,22 @@ class TaskAgent:
             pass
         return []
 
+    @staticmethod
+    def extract_title(file_path: Path) -> str:
+        """Helper to extract the H1 title from a markdown file."""
+        try:
+            with file_path.open("r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith("# "):
+                        # Return the title without the '# ' prefix, and strip any leading/trailing whitespace
+                        # Also handle the case where the user might have multiple #, like '# # My Title'
+                        return line.lstrip("#").strip()
+        except Exception:
+            pass
+        # Fallback to filename if no title found
+        return file_path.stem
+
     def create_issue(
         self,
         title: str,
@@ -337,7 +374,10 @@ class TaskAgent:
         completion_criteria: Optional[str] = None,
     ) -> Issue:
         """Create a new issue."""
-        slug = self.slugify(title)
+        # Sanitize title for slug, but keep original for 'name'
+        # If title starts with '# ', strip it for both
+        display_name = title.lstrip("#").strip()
+        slug = self.slugify(display_name)
         status = "draft" if draft else "pending"
         target_dir = self.issues_root / status
         target_dir.mkdir(parents=True, exist_ok=True)
@@ -358,7 +398,7 @@ class TaskAgent:
 
         # Write the markdown file
         with issue_file.open("w", encoding="utf-8") as f:
-            f.write(f"# {title}\n\n")
+            f.write(f"# {display_name}\n\n")
             if deps:
                 f.write(f"**Depends on:** {', '.join(deps)}\n\n")
             f.write(f"{body}\n")
@@ -368,7 +408,11 @@ class TaskAgent:
         # Update mission.usv
         issues = self.load_mission()
         new_issue = Issue(
-            slug=slug, dependencies=deps, status=status, priority=len(issues) + 1
+            name=display_name,
+            slug=slug,
+            dependencies=deps,
+            status=status,
+            priority=len(issues) + 1,
         )
         issues.append(new_issue)
         self.save_mission(issues)
@@ -654,11 +698,12 @@ class TaskAgent:
 
         issue_file.write_text(content, encoding="utf-8")
 
-        # Re-extract deps in case they changed
+        # Re-extract name and deps in case they changed
         issues = self.load_mission()
         updated = False
         for i in issues:
             if i.slug == slug:
+                i.name = self.extract_title(issue_file)
                 i.dependencies = self.extract_deps(issue_file)
                 updated = True
                 break
@@ -672,7 +717,7 @@ class TaskAgent:
                 return i
 
         # If it was completed, it's not in mission.usv
-        return Issue(slug=slug, status="completed")
+        return Issue(name=self.extract_title(issue_file), slug=slug, status="completed")
 
     def ingest_issues(self) -> Tuple[int, int]:
         """Ingest existing markdown files. Returns (num_new, num_removed)."""
@@ -690,21 +735,23 @@ class TaskAgent:
 
             # File-based
             for issue_file in list(status_dir.glob("*.md")):
+                name = self.extract_title(issue_file)
                 slug = self.slugify(issue_file.stem)
                 if slug not in existing_slugs:
                     deps = self.extract_deps(issue_file)
                     new_issues.append(
-                        Issue(slug=slug, dependencies=deps, status=status)
+                        Issue(name=name, slug=slug, dependencies=deps, status=status)
                     )
                     existing_slugs.add(slug)
 
             # Directory-based
             for readme_file in list(status_dir.glob("*/README.md")):
+                name = self.extract_title(readme_file)
                 slug = self.slugify(readme_file.parent.name)
                 if slug not in existing_slugs:
                     deps = self.extract_deps(readme_file)
                     new_issues.append(
-                        Issue(slug=slug, dependencies=deps, status=status)
+                        Issue(name=name, slug=slug, dependencies=deps, status=status)
                     )
                     existing_slugs.add(slug)
 

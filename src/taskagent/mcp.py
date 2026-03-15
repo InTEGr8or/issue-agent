@@ -24,7 +24,7 @@ def list_tasks() -> str:
     lines = []
     for i in issues:
         deps = f" (depends on: {', '.join(i.dependencies)})" if i.dependencies else ""
-        lines.append(f"[{i.priority}] {i.status.upper()}: {i.slug}{deps}")
+        lines.append(f"[{i.priority}] {i.status.upper()}: {i.name}{deps}")
     return "\n".join(lines)
 
 
