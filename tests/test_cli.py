@@ -4,6 +4,7 @@ from taskagent.cli import (
     cmd_done,
     cmd_ingest,
     cmd_promote,
+    main,
 )
 from taskagent.manager import TaskAgent
 from rich.console import Console
@@ -182,3 +183,16 @@ def test_cmd_promote(manager, temp_issues_dir):
 
     issues = manager.load_mission()
     assert issues[0].status == "pending"
+
+
+def test_prior_command_is_registered():
+    import sys
+    from unittest.mock import patch
+
+    with patch.object(sys, "argv", ["ta", "--help"]):
+        with pytest.raises(SystemExit):
+            main()
+
+    with patch.object(sys, "argv", ["ta", "prior", "--help"]):
+        with pytest.raises(SystemExit):
+            main()

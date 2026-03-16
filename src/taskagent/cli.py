@@ -815,37 +815,58 @@ def cmd_mcp():
     run_mcp_server()
 
 
-def cmd_init_mcp(console: Console, scope: str = "project"):
-    """Register the Task Agent as an MCP server in Gemini CLI."""
-    console.print(
-        f"[blue]Registering Task Agent as an MCP server ({scope} scope)...[/blue]"
-    )
+# ... (in imports)
 
-    # We assume 'ta' is in the path.
-    command = [
-        "gemini",
-        "mcp",
-        "add",
-        "task-agent",
-        "ta",
-        "mcp",
-        "--trust",
-        "--scope",
-        scope,
-    ]
 
-    try:
-        subprocess.run(command, check=True, shell=(os.name == "nt"))
+def cmd_init_mcp(
+    console: Console,
+    agent: str = "gemini",
+    print_json: bool = False,
+    scope: str = "project",
+):
+    """Register the Task Agent as an MCP server."""
+    mcp_config = {
+        "mcpServers": {
+            "task-agent": {
+                "command": "ta",
+                "args": ["mcp"],
+            }
+        }
+    }
+
+    if print_json:
+        console.print(json.dumps(mcp_config, indent=2))
+        return
+
+    if agent == "gemini":
         console.print(
-            "[bold green]Successfully registered Task Agent MCP server![/bold green]"
+            f"[blue]Registering Task Agent as an MCP server ({scope} scope)...[/blue]"
         )
+        command = [
+            "gemini",
+            "mcp",
+            "add",
+            "task-agent",
+            "ta",
+            "mcp",
+            "--trust",
+            "--scope",
+            scope,
+        ]
+        try:
+            subprocess.run(command, check=True, shell=(os.name == "nt"))
+            console.print(
+                "[bold green]Successfully registered Task Agent MCP server![/bold green]"
+            )
+        except subprocess.CalledProcessError as e:
+            console.print(f"[red]Failed to register MCP server: {e}[/red]")
+    elif agent == "opencode":
         console.print(
-            f"You can now use task-related tools in any Gemini CLI session within this {scope}."
+            "[yellow]For OpenCode, please add this configuration manually:[/yellow]"
         )
-    except subprocess.CalledProcessError as e:
-        console.print(f"[red]Failed to register MCP server: {e}[/red]")
+        console.print(json.dumps(mcp_config, indent=2))
         console.print(
-            "[yellow]Ensure you have 'gemini-cli' installed and 'ta' in your PATH.[/yellow]"
+            "[dim]Note: OpenCode doesn't have a direct CLI registration for MCP yet.[/dim]"
         )
 
 
@@ -1271,7 +1292,16 @@ def main():
 
     # init-mcp
     init_mcp_parser = subparsers.add_parser(
-        "init-mcp", help="Register as an MCP server in Gemini CLI"
+        "init-mcp", help="Register as an MCP server"
+    )
+    init_mcp_parser.add_argument(
+        "--agent",
+        choices=["gemini", "opencode"],
+        default="gemini",
+        help="MCP agent to configure (default: gemini)",
+    )
+    init_mcp_parser.add_argument(
+        "--print", action="store_true", help="Print MCP configuration JSON"
     )
     init_mcp_parser.add_argument(
         "--scope",
@@ -1368,7 +1398,7 @@ def main():
     elif args.command == "mcp":
         cmd_mcp()
     elif args.command == "init-mcp":
-        cmd_init_mcp(console, scope=args.scope)
+        cmd_init_mcp(console, agent=args.agent, print_json=args.print, scope=args.scope)
     elif args.command == "push":
         cmd_push(console, manager)
     elif args.command == "eject-mission":
