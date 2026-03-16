@@ -1033,9 +1033,7 @@ def cmd_triage(
             if show_completed:
                 help_text = "[dim]j/k: move | r: rest | v: view | e: edit | c: toggle comp | /: search | q: exit[/dim]"
 
-            live.update(
-                Panel(table, subtitle=help_text, border_style="blue"), refresh=True
-            )
+            live.update(Panel(table, subtitle=help_text, box=None), refresh=True)
 
             # Input
             key = get_key()
