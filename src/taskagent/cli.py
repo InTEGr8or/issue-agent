@@ -1050,9 +1050,9 @@ def cmd_triage(
                     style=style,
                 )
 
-            help_text = "[dim]j/k: move | ctrl+k/j: prio | p: prom | d: dem | v: view | e: edit | a: add | c: comp | /: search | q: exit[/dim]"
+            help_text = "[dim][bold]j/k[/bold]: move | [bold]ctrl+k/j[/bold]: prio | [bold]p[/bold]: prom | [bold]d[/bold]: dem | [bold]v[/bold]: view | [bold]e[/bold]: edit | [bold]a[/bold]: add | [bold]c[/bold]: comp | [bold]/[/bold]: search | [bold]q[/bold]: exit[/dim]"
             if show_completed:
-                help_text = "[dim]j/k: move | r: rest | v: view | e: edit | c: toggle comp | /: search | q: exit[/dim]"
+                help_text = "[dim][bold]j/k[/bold]: move | [bold]r[/bold]: rest | [bold]v[/bold]: view | [bold]e[/bold]: edit | [bold]c[/bold]: toggle comp | [bold]/[/bold]: search | [bold]q[/bold]: exit[/dim]"
 
             from rich.box import ROUNDED
 

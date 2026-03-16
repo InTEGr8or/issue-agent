@@ -37,3 +37,6 @@ Keep `issues_dir` config key working but deprecated. New installs use `docs/task
 
 ## Question
 Should the ejected sibling directory keep the `-issues` suffix (e.g., `myproject-issues`) or also migrate to `-tasks`? The latter is cleaner but requires updating the external repo name on GitHub.
+
+---
+**Completed in commit:** `8518b7c`
