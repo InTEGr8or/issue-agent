@@ -405,18 +405,11 @@ class TaskAgent:
             if completion_criteria:
                 f.write(f"\n## Completion Criteria\n\n{completion_criteria}\n")
 
-        # Update mission.usv
+        # Update mission.usv and datapackage.json via init
+        self.init_project()
+        # Reload to get the issue with proper priority from mission.usv
         issues = self.load_mission()
-        new_issue = Issue(
-            name=display_name,
-            slug=slug,
-            dependencies=deps,
-            status=status,
-            priority=len(issues) + 1,
-        )
-        issues.append(new_issue)
-        self.save_mission(issues)
-        return new_issue
+        return next(i for i in issues if i.slug == slug)
 
     def promote_issue(self, slug: str) -> Issue:
         """Promote an issue from draft to pending."""
