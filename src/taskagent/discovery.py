@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 
 def _handle_ejected_symlink(current_root: Path):
     """
-    Checks for TA_EJECT_ISSUES and ensures docs/issues symlink is correct.
+    Checks for TA_EJECT_ISSUES and TA_EJECT_TASKS and ensures docs symlink is correct.
     This 'auto-heals' links in new worktrees or clones.
     """
     # 1. Try to find the primary .env
@@ -21,35 +21,41 @@ def _handle_ejected_symlink(current_root: Path):
     if env_path.exists():
         load_dotenv(env_path)
 
-    eject_enabled = os.environ.get("TA_EJECT_ISSUES", "").lower() == "true"
-    target_path_str = os.environ.get("TA_EJECTED_ISSUES_PATH")
+    # Support both TA_EJECT_ISSUES and TA_EJECT_TASKS
+    eject_enabled = (
+        os.environ.get("TA_EJECT_TASKS", "").lower() == "true"
+        or os.environ.get("TA_EJECT_ISSUES", "").lower() == "true"
+    )
+    target_path_str = os.environ.get("TA_EJECTED_TASKS_PATH") or os.environ.get(
+        "TA_EJECTED_ISSUES_PATH"
+    )
 
     if not eject_enabled or not target_path_str:
         return
 
     target_path = Path(target_path_str).absolute()
-    issues_link = current_root / "docs" / "issues"
+    tasks_link = current_root / "docs" / "tasks"
 
     # Ensure parent (docs/) exists
-    issues_link.parent.mkdir(parents=True, exist_ok=True)
+    tasks_link.parent.mkdir(parents=True, exist_ok=True)
 
-    if issues_link.exists() or issues_link.is_symlink():
+    if tasks_link.exists() or tasks_link.is_symlink():
         # Check if it's already correct
-        if issues_link.is_symlink() and str(issues_link.readlink()) == str(target_path):
+        if tasks_link.is_symlink() and str(tasks_link.readlink()) == str(target_path):
             return
         # If it's a directory or broken symlink, we might need to be careful.
         # But if ejection is forced, we want the link.
-        if issues_link.is_symlink():
-            issues_link.unlink()
-        elif issues_link.is_dir() and not any(issues_link.iterdir()):
-            issues_link.rmdir()
+        if tasks_link.is_symlink():
+            tasks_link.unlink()
+        elif tasks_link.is_dir() and not any(tasks_link.iterdir()):
+            tasks_link.rmdir()
         else:
             # It's a non-empty directory, we don't want to overwrite user data
             return
 
     # Create the absolute symlink
     try:
-        os.symlink(str(target_path), str(issues_link))
+        os.symlink(str(target_path), str(tasks_link))
     except Exception:
         pass
 
@@ -62,8 +68,9 @@ def discover(start_path: Optional[Path] = None) -> TaskAgent:
     1. TA_CONFIG_DIR environment variable.
     2. .ta-config.json in start_path or any parent.
     3. pyproject.toml [tool.taskagent] in start_path or any parent.
-    4. docs/issues/ directory in start_path or any parent.
-    5. ~/.config/task-agent/settings.json (Global fallback)
+    4. docs/tasks/ directory in start_path or any parent.
+    5. docs/issues/ directory in start_path or any parent (legacy, for migration).
+    6. ~/.config/task-agent/settings.json (Global fallback)
 
     Returns:
         TaskAgent: Initialized manager for the discovered instance.
@@ -92,6 +99,8 @@ def discover(start_path: Optional[Path] = None) -> TaskAgent:
         if config_file.exists():
             try:
                 config = json.loads(config_file.read_text())
+                if "tasks_dir" in config:
+                    return TaskAgent(config_dir=str(current / config["tasks_dir"]))
                 if "issues_dir" in config:
                     return TaskAgent(config_dir=str(current / config["issues_dir"]))
             except Exception:
@@ -106,13 +115,25 @@ def discover(start_path: Optional[Path] = None) -> TaskAgent:
                 with pyproject.open("rb") as f:
                     data = tomllib.load(f)
                     ta_cfg = data.get("tool", {}).get("taskagent")
-                    if ta_cfg and "issues_dir" in ta_cfg:
-                        return TaskAgent(config_dir=str(current / ta_cfg["issues_dir"]))
+                    if ta_cfg:
+                        if "tasks_dir" in ta_cfg:
+                            return TaskAgent(
+                                config_dir=str(current / ta_cfg["tasks_dir"])
+                            )
+                        if "issues_dir" in ta_cfg:
+                            return TaskAgent(
+                                config_dir=str(current / ta_cfg["issues_dir"])
+                            )
             except Exception:
                 # Fallback if tomllib is missing or parse fails
                 pass
 
-        # 3. Check for standard folder
+        # 3. Check for docs/tasks/ (new default)
+        tasks_dir = current / "docs" / "tasks"
+        if tasks_dir.exists() and tasks_dir.is_dir():
+            return TaskAgent(config_dir=str(tasks_dir))
+
+        # 4. Check for docs/issues/ (legacy fallback for migration)
         issues_dir = current / "docs" / "issues"
         if issues_dir.exists() and issues_dir.is_dir():
             return TaskAgent(config_dir=str(issues_dir))
@@ -123,17 +144,19 @@ def discover(start_path: Optional[Path] = None) -> TaskAgent:
             break
         current = parent
 
-    # 4. Check Global Config
+    # 5. Check Global Config
     global_config = Path("~/.config/task-agent/settings.json").expanduser()
     if global_config.exists():
         try:
             config = json.loads(global_config.read_text())
+            if "tasks_dir" in config:
+                return TaskAgent(config_dir=config["tasks_dir"])
             if "issues_dir" in config:
                 return TaskAgent(config_dir=config["issues_dir"])
         except Exception:
             pass
 
-    # Fallback to default (which will create docs/issues in starting search dir if not found)
+    # Fallback to default (which will create docs/tasks in starting search dir if not found)
     # We use start_path or cwd as the base
     fallback_base = Path(start_path or Path.cwd()).absolute()
-    return TaskAgent(config_dir=str(fallback_base / "docs" / "issues"))
+    return TaskAgent(config_dir=str(fallback_base / "docs" / "tasks"))

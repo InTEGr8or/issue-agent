@@ -41,6 +41,6 @@ def test_discover_config_file(tmp_path):
 
 
 def test_discover_fallback(tmp_path):
-    # No issues dir, no config, no env var
+    # No tasks/issues dir, no config, no env var
     manager = discover(start_path=tmp_path)
-    assert manager.issues_root.resolve() == (tmp_path / "docs" / "issues").resolve()
+    assert manager.issues_root.resolve() == (tmp_path / "docs" / "tasks").resolve()

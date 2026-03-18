@@ -4,9 +4,11 @@
 The project started as `issue-agent` and stores everything in `docs/issues/`. We've migrated the repo and package to `task-agent`, but the storage path still uses the old name.
 
 ## Current State
-- Default path: `docs/issues`
-- Eject creates: `{project}-issues/` sibling directory with symlink at `docs/issues`
-- Config stored in: `.env` with `TA_EJECT_ISSUES=true` and `TA_EJECTED_ISSUES_PATH`
+- Default path: `docs/tasks`
+- Eject creates: `{project}-tasks/` sibling directory with symlink at `docs/tasks`
+- Config stored in: `.env` with `TA_EJECT_TASKS=true` and `TA_EJECTED_TASKS_PATH`
+- Supports legacy `docs/issues` for migration (discovers both, prefers `docs/tasks`)
+- Supports both `TA_EJECT_ISSUES` and `TA_EJECT_TASKS` env vars for backwards compatibility
 
 ## Migration Approach
 

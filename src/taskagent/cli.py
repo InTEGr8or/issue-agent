@@ -1050,9 +1050,9 @@ def cmd_triage(
                     style=style,
                 )
 
-            help_text = "[dim][bold]j/k[/bold]: move | [bold]ctrl+k/j[/bold]: prio | [bold]p[/bold]: prom | [bold]d[/bold]: dem | [bold]v[/bold]: view | [bold]e[/bold]: edit | [bold]a[/bold]: add | [bold]c[/bold]: comp | [bold]/[/bold]: search | [bold]q[/bold]: exit[/dim]"
+            help_text = "[dim]j/k: move | ctrl+k/j: prio | p: prom | d: dem | v: view | e: edit | a: add | D: done | l: depends on above | h: unlink dep | /: search | q: exit[/dim]"
             if show_completed:
-                help_text = "[dim][bold]j/k[/bold]: move | [bold]r[/bold]: rest | [bold]v[/bold]: view | [bold]e[/bold]: edit | [bold]c[/bold]: toggle comp | [bold]/[/bold]: search | [bold]q[/bold]: exit[/dim]"
+                help_text = "[dim]j/k: move | r: rest | v: view | e: edit | c: toggle | /: search | q: exit[/dim]"
 
             from rich.box import ROUNDED
 
@@ -1161,6 +1161,34 @@ def cmd_triage(
                     cursor = min(len(issues) - 1, cursor)
                 except Exception:
                     pass
+            elif key == "D" and not show_completed:  # done
+                live.stop()
+                issue = issues[cursor]
+                try:
+                    cmd_done(console, manager, issue.slug)
+                    issues = get_display_issues(search_query, show_completed)
+                except Exception as e:
+                    console.print(f"[red]Error: {e}[/red]")
+                    questionary.press_any_key_to_continue().ask()
+                live.start()
+            elif key == "l" and not show_completed:  # make current depend on above
+                if cursor > 0:
+                    current_issue = issues[cursor]
+                    above_issue = issues[cursor - 1]
+                    try:
+                        manager.add_dependency(current_issue.slug, above_issue.slug)
+                        issues = get_display_issues(search_query, show_completed)
+                    except Exception as e:
+                        console.print(f"[red]Error: {e}[/red]")
+            elif key == "h" and not show_completed:  # remove dependency on above
+                if cursor > 0:
+                    current_issue = issues[cursor]
+                    above_issue = issues[cursor - 1]
+                    try:
+                        manager.remove_dependency(current_issue.slug, above_issue.slug)
+                        issues = get_display_issues(search_query, show_completed)
+                    except Exception as e:
+                        console.print(f"[red]Error: {e}[/red]")
 
 
 def display_overview(console: Console, manager: TaskAgent):
@@ -1327,7 +1355,6 @@ def main():
     done_parser.add_argument("slug", nargs="?")
     done_parser.add_argument("-m", "--message")
     done_parser.add_argument("-s", "--solution", help="Solution explanation")
-    done_parser.add_argument("--no-commit", action="store_true")
     done_parser.add_argument(
         "--push", action="store_true", help="Push the mission repo after completion"
     )
@@ -1411,7 +1438,7 @@ def main():
             manager,
             args.slug,
             args.message,
-            not args.no_commit,
+            True,
             args.push,
             args.solution,
         )

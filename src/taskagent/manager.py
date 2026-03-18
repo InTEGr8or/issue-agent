@@ -66,9 +66,9 @@ class TaskAgent:
         if config_dir:
             issues_root = Path(config_dir)
         else:
-            # Check environment variable, then default to docs/issues
+            # Check environment variable, then default to docs/tasks
             env_dir = os.environ.get("TA_CONFIG_DIR")
-            issues_root = Path(env_dir) if env_dir else Path("docs/issues")
+            issues_root = Path(env_dir) if env_dir else Path("docs/tasks")
 
         mission_path = issues_root / "mission.usv"
         return issues_root, mission_path
@@ -482,6 +482,59 @@ class TaskAgent:
         self.sync_mission()
         target.status = "active"
         return target
+
+    def add_dependency(self, slug: str, depends_on: str) -> None:
+        """Add a dependency to an issue."""
+        issue_file = self.find_issue_file(slug)
+        if not issue_file:
+            raise FileNotFoundError(f"Issue file not found for '{slug}'.")
+
+        content = issue_file.read_text(encoding="utf-8")
+        deps = self.extract_deps(issue_file)
+
+        if depends_on in deps:
+            return
+
+        deps.append(depends_on)
+
+        pattern = r"(\*\*Depends on:\*\*\s*)(.*?)(\n|$)"
+        new_deps_line = f"**Depends on:** {', '.join(deps)}"
+
+        if re.search(pattern, content):
+            content = re.sub(pattern, new_deps_line + r"\3", content)
+        else:
+            content = content.rstrip() + f"\n\n{new_deps_line}\n"
+
+        self._set_writable(issue_file, True)
+        issue_file.write_text(content, encoding="utf-8")
+        self._set_writable(issue_file, False)
+        self.init_project()
+
+    def remove_dependency(self, slug: str, depends_on: str) -> None:
+        """Remove a dependency from an issue."""
+        issue_file = self.find_issue_file(slug)
+        if not issue_file:
+            raise FileNotFoundError(f"Issue file not found for '{slug}'.")
+
+        content = issue_file.read_text(encoding="utf-8")
+        deps = self.extract_deps(issue_file)
+
+        if depends_on not in deps:
+            return
+
+        deps.remove(depends_on)
+
+        pattern = r"(\*\*Depends on:\*\*\s*)(.*?)(\n|$)"
+        if deps:
+            new_deps_line = f"**Depends on:** {', '.join(deps)}"
+            content = re.sub(pattern, new_deps_line + r"\3", content)
+        else:
+            content = re.sub(r"\n?\*\*Depends on:\*\*.*?(\n|$)", "", content)
+
+        self._set_writable(issue_file, True)
+        issue_file.write_text(content, encoding="utf-8")
+        self._set_writable(issue_file, False)
+        self.init_project()
 
     def _git_commit(
         self,
