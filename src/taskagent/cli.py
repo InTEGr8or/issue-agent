@@ -1025,7 +1025,6 @@ def cmd_triage(
     console: Console, manager: TaskAgent, search_query: Optional[str] = None
 ):
     """Interactively reorder and promote tasks."""
-    # We might want to triage COMPLETED issues too
     show_completed = False
 
     def get_display_issues(search: Optional[str] = None, completed: bool = False):
@@ -1062,12 +1061,52 @@ def cmd_triage(
             issues = [i for i in issues if search.lower() in i.slug.lower()]
         return issues
 
+    def build_hierarchy(issues: List[Issue]) -> List[Tuple[Issue, int]]:
+        """Build a flat list with depth info for dependency hierarchy."""
+        slug_to_issue = {i.slug: i for i in issues}
+        children_map: Dict[str, List[str]] = {}
+        for i in issues:
+            for dep in i.dependencies:
+                if dep in slug_to_issue:
+                    if dep not in children_map:
+                        children_map[dep] = []
+                    children_map[dep].append(i.slug)
+
+        visited: Set[str] = set()
+        rows: List[Tuple[Issue, int]] = []
+
+        def build_rows(issue: Issue, depth: int):
+            if issue.slug in visited:
+                return
+            visited.add(issue.slug)
+            rows.append((issue, depth))
+            if issue.slug in children_map:
+                for child_slug in children_map[issue.slug]:
+                    if child_slug in slug_to_issue:
+                        build_rows(slug_to_issue[child_slug], depth + 1)
+
+        for issue in issues:
+            has_internal_dep = any(dep in slug_to_issue for dep in issue.dependencies)
+            if not has_internal_dep:
+                build_rows(issue, 0)
+
+        for issue in issues:
+            if issue.slug not in visited:
+                build_rows(issue, 0)
+
+        return rows
+
     issues = get_display_issues(search_query, show_completed)
     if not issues and not search_query:
         console.print("[yellow]No issues to triage.[/yellow]")
         return
 
+    # Build hierarchy for cursor mapping
+    hierarchy = build_hierarchy(issues)
+    # Map flat index to (issue, depth)
+    indexed_issues = [(issue, depth) for issue, depth in hierarchy]
     cursor = 0
+
     with Live(auto_refresh=False, console=console, screen=True) as live:
         while True:
             # Render
@@ -1087,12 +1126,14 @@ def cmd_triage(
             table.add_column("Status", width=10)
             table.add_column("Slug")
 
-            for i, issue in enumerate(issues):
-                style = "bold cyan" if i == cursor else "white"
-                if i == cursor:
-                    display_slug = f"> [reverse]{issue.slug}[/reverse]"
+            for idx, (issue, depth) in enumerate(indexed_issues):
+                style = "bold cyan" if idx == cursor else "white"
+                indent = "  " * depth
+                prefix = "└─ " if depth > 0 else ""
+                if idx == cursor:
+                    display_slug = f"> [reverse]{indent}{prefix}{issue.slug}[/reverse]"
                 else:
-                    display_slug = f"  {issue.slug}"
+                    display_slug = f"  {indent}{prefix}{issue.slug}"
 
                 status_style = "white"
                 if issue.status == "active":
@@ -1105,7 +1146,7 @@ def cmd_triage(
                     status_style = "bold blue"
 
                 table.add_row(
-                    str(i + 1) if not show_completed else "-",
+                    str(idx + 1) if not show_completed else "-",
                     f"[{status_style}]{issue.status.upper()}[/{status_style}]",
                     display_slug,
                     style=style,
@@ -1130,19 +1171,21 @@ def cmd_triage(
                 live.stop()
                 search_query = questionary.text("Search slug:").ask()
                 issues = get_display_issues(search_query, show_completed)
+                indexed_issues = build_hierarchy(issues)
                 cursor = 0
                 live.start()
             elif key == "c":
                 show_completed = not show_completed
                 issues = get_display_issues(search_query, show_completed)
+                indexed_issues = build_hierarchy(issues)
                 cursor = 0
             elif key in ["k", "\x1b[A"]:  # up
                 cursor = max(0, cursor - 1)
             elif key in ["j", "\x1b[B"]:  # down
-                cursor = min(len(issues) - 1, cursor + 1)
+                cursor = min(len(indexed_issues) - 1, cursor + 1)
             elif key == "v":
                 live.stop()
-                issue = issues[cursor]
+                issue = indexed_issues[cursor][0]
                 issue_file = manager.find_issue_file(
                     issue.slug, include_completed=show_completed
                 )
@@ -1154,7 +1197,7 @@ def cmd_triage(
                 live.start()
             elif key == "e":
                 live.stop()
-                issue = issues[cursor]
+                issue = indexed_issues[cursor][0]
                 issue_file = manager.find_issue_file(
                     issue.slug, include_completed=show_completed
                 )
@@ -1163,6 +1206,7 @@ def cmd_triage(
                     subprocess.run([editor, str(issue_file)])
                     manager.init_project()
                     issues = get_display_issues(search_query, show_completed)
+                    indexed_issues = build_hierarchy(issues)
                 else:
                     console.print(f"[red]Issue file not found for {issue.slug}[/red]")
                     questionary.press_any_key_to_continue().ask()
@@ -1178,76 +1222,85 @@ def cmd_triage(
                         console.print(f"[bold green]Created: {issue.slug}[/bold green]")
                         manager.init_project()
                         issues = get_display_issues(search_query, show_completed)
+                        indexed_issues = build_hierarchy(issues)
                     except Exception as e:
                         console.print(f"[red]Error: {e}[/red]")
                         questionary.press_any_key_to_continue().ask()
                 live.start()
             elif key == "\x0b" and not show_completed:  # ctrl+k
-                slug = issues[cursor].slug
+                slug = indexed_issues[cursor][0].slug
                 try:
                     manager.prioritize_issue(slug, "up")
                     issues = get_display_issues(search_query, show_completed)
+                    indexed_issues = build_hierarchy(issues)
                     cursor = max(0, cursor - 1)
                 except Exception:
                     pass
             elif key == "\x0a" and not show_completed:  # ctrl+j (often \n)
-                slug = issues[cursor].slug
+                slug = indexed_issues[cursor][0].slug
                 try:
                     manager.prioritize_issue(slug, "down")
                     issues = get_display_issues(search_query, show_completed)
-                    cursor = min(len(issues) - 1, cursor + 1)
+                    indexed_issues = build_hierarchy(issues)
+                    cursor = min(len(indexed_issues) - 1, cursor + 1)
                 except Exception:
                     pass
             elif key == "p" and not show_completed:  # promote
-                issue = issues[cursor]
+                issue = indexed_issues[cursor][0]
                 if issue.status == "draft":
                     try:
                         manager.promote_issue(issue.slug)
                         issues = get_display_issues(search_query, show_completed)
+                        indexed_issues = build_hierarchy(issues)
                     except Exception:
                         pass
             elif key == "d" and not show_completed:  # demote
-                issue = issues[cursor]
+                issue = indexed_issues[cursor][0]
                 if issue.status == "pending":
                     try:
                         manager.demote_issue(issue.slug)
                         issues = get_display_issues(search_query, show_completed)
+                        indexed_issues = build_hierarchy(issues)
                     except Exception:
                         pass
             elif key == "r" and show_completed:  # restore
-                target = issues[cursor]
+                target = indexed_issues[cursor][0]
                 try:
                     manager.restore_issue(target.slug, to_status="pending")
                     issues = get_display_issues(search_query, show_completed)
-                    cursor = min(len(issues) - 1, cursor)
+                    indexed_issues = build_hierarchy(issues)
+                    cursor = min(len(indexed_issues) - 1, cursor)
                 except Exception:
                     pass
             elif key == "D" and not show_completed:  # done
                 live.stop()
-                issue = issues[cursor]
+                issue = indexed_issues[cursor][0]
                 try:
                     cmd_done(console, manager, issue.slug)
                     issues = get_display_issues(search_query, show_completed)
+                    indexed_issues = build_hierarchy(issues)
                 except Exception as e:
                     console.print(f"[red]Error: {e}[/red]")
                     questionary.press_any_key_to_continue().ask()
                 live.start()
             elif key == "l" and not show_completed:  # make current depend on above
                 if cursor > 0:
-                    current_issue = issues[cursor]
-                    above_issue = issues[cursor - 1]
+                    current_issue = indexed_issues[cursor][0]
+                    above_issue = indexed_issues[cursor - 1][0]
                     try:
                         manager.add_dependency(current_issue.slug, above_issue.slug)
                         issues = get_display_issues(search_query, show_completed)
+                        indexed_issues = build_hierarchy(issues)
                     except Exception as e:
                         console.print(f"[red]Error: {e}[/red]")
             elif key == "h" and not show_completed:  # remove dependency on above
                 if cursor > 0:
-                    current_issue = issues[cursor]
-                    above_issue = issues[cursor - 1]
+                    current_issue = indexed_issues[cursor][0]
+                    above_issue = indexed_issues[cursor - 1][0]
                     try:
                         manager.remove_dependency(current_issue.slug, above_issue.slug)
                         issues = get_display_issues(search_query, show_completed)
+                        indexed_issues = build_hierarchy(issues)
                     except Exception as e:
                         console.print(f"[red]Error: {e}[/red]")
 
