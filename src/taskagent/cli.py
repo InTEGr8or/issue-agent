@@ -886,11 +886,15 @@ def cmd_version(
                 )
                 return
             tag_name = f"v{v}"
-            console.print(f"[blue]Tagging current commit as {tag_name}...[/blue]")
-            subprocess.run(
-                ["git", "tag", tag_name], check=True, shell=(os.name == "nt")
+            result = subprocess.run(
+                ["git", "tag", tag_name],
+                capture_output=True,
+                shell=(os.name == "nt"),
             )
-            console.print(f"[bold green]Tagged commit as {tag_name}[/bold green]")
+            if result.returncode != 0:
+                console.print(f"[yellow]Tag {tag_name} already exists.[/yellow]")
+            else:
+                console.print(f"[bold green]Tagged commit as {tag_name}[/bold green]")
 
             if push:
                 console.print(f"[blue]Pushing tag {tag_name} to origin...[/blue]")
