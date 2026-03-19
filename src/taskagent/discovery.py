@@ -81,10 +81,10 @@ def discover(start_path: Optional[Path] = None) -> TaskAgent:
     current = Path(start_path or Path.cwd()).absolute()
     search_root = current
 
-    # We walk up to find the project root (where .git or pyproject.toml is)
-    # to handle symlink healing.
+    repo_boundary = None
     while True:
         if (current / ".git").exists() or (current / "pyproject.toml").exists():
+            repo_boundary = current
             _handle_ejected_symlink(current)
             break
         parent = current.parent
@@ -94,6 +94,9 @@ def discover(start_path: Optional[Path] = None) -> TaskAgent:
 
     current = search_root
     while True:
+        if repo_boundary and not current.is_relative_to(repo_boundary):
+            break
+
         # 1. Check for explicit config file
         config_file = current / ".ta-config.json"
         if config_file.exists():
@@ -137,6 +140,9 @@ def discover(start_path: Optional[Path] = None) -> TaskAgent:
         issues_dir = current / "docs" / "issues"
         if issues_dir.exists() and issues_dir.is_dir():
             return TaskAgent(config_dir=str(issues_dir))
+
+        if current == repo_boundary:
+            break
 
         # Move up
         parent = current.parent
