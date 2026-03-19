@@ -177,6 +177,16 @@ def get_key() -> str:
     return sys.stdin.read(1)
 
 
+def get_editor() -> str:
+    """Get the default editor, checking in order: EDITOR env, nvim, vim."""
+    editor = os.environ.get("EDITOR")
+    if editor:
+        return editor
+    if shutil.which("nvim"):
+        return "nvim"
+    return "vim"
+
+
 def select_issue(
     console: Console,
     issues: List[Issue],
@@ -1202,7 +1212,7 @@ def cmd_triage(
                     issue.slug, include_completed=show_completed
                 )
                 if issue_file:
-                    editor = os.environ.get("EDITOR", "vim")
+                    editor = get_editor()
                     subprocess.run([editor, str(issue_file)])
                     manager.init_project()
                     issues = get_display_issues(search_query, show_completed)

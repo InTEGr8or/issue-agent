@@ -1,3 +1,3 @@
-Make NVim the default editormake-nvim-the-default-editor
+task-agent should not create read-only access on each task Markdowntask-agent-should-not-create-read-only-access-on-each-task-markdown
 test plantest-plan
 test tasktest-task
