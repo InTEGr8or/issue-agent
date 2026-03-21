@@ -90,6 +90,20 @@ class TaskAgent:
     def init_project(self) -> Tuple[int, int]:
         """Initialize or heal the task agent structure in the current project.
         Syncs disk state with mission.usv. Returns (num_new, num_removed)."""
+        # Migrate issues/ to tasks/ if exists
+        old_dir = self.issues_root.parent / "issues"
+        if old_dir.exists() and old_dir.is_dir():
+            if not self.issues_root.exists():
+                self.issues_root.mkdir(parents=True)
+            for item in old_dir.iterdir():
+                # Only move if destination doesn't exist to avoid overwrites
+                dest = self.issues_root / item.name
+                if not dest.exists():
+                    shutil.move(str(item), str(dest))
+            # Remove only if empty
+            if not any(old_dir.iterdir()):
+                old_dir.rmdir()
+
         self.ensure_issues_dir()
         num_new, num_removed = self.ingest_issues()
         self.save_datapackage()
