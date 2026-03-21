@@ -1483,6 +1483,9 @@ def main():
         "--push", action="store_true", help="Push the mission repo after completion"
     )
 
+    path_parser = subparsers.add_parser("path", help="Get the absolute path to a task")
+    path_parser.add_argument("slug", help="Task slug")
+
     new_parser = subparsers.add_parser("new")
     new_parser.add_argument("title")
     new_parser.add_argument("-b", "--body", default="")
@@ -1511,7 +1514,14 @@ def main():
 
     manager = discover(Path(args.config_dir) if args.config_dir else None)
 
-    if args.command == "next":
+    if args.command == "path":
+        issue_file = manager.find_issue_file(args.slug)
+        if issue_file:
+            print(issue_file.absolute())
+        else:
+            console.print(f"[red]Task '{args.slug}' not found.[/red]")
+            sys.exit(1)
+    elif args.command == "next":
         cmd_next(console, manager)
     elif args.command == "init":
         cmd_init(console, manager)
