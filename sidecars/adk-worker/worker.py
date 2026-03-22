@@ -207,7 +207,7 @@ def main():
     try:
         # Start the ADK interaction
         # We pass the metadata into the initial state via kwargs
-        root_agent.run(
+        state = root_agent.run(
             input_text=f"Solve issue {slug} based on {file_path}",
             TA_SLUG=slug,
             TA_FILE=file_path,
@@ -216,9 +216,21 @@ def main():
         )
         console.print("[bold green]ADK Sidecar execution finished.[/bold green]")
 
-        # Signal completion
-        console.print(f"[blue]Signaling 'ta done {slug}'...[/blue]")
-        subprocess.run(["ta", "done", slug], check=True)
+        # Extract the "solution" - for now we use the validation feedback or worker plan
+        # In a real scenario, we might have a specific agent for the final report.
+        solution = state.get("validation_feedback", "Task completed by ADK worker.")
+
+        # Post Merge Request
+        mr_dir = Path(project_root) / "docs" / "tasks" / "mr"
+        mr_dir.mkdir(parents=True, exist_ok=True)
+        mr_file = mr_dir / f"{slug}.md"
+
+        console.print(f"[blue]Posting Merge Request to {mr_file}...[/blue]")
+        mr_file.write_text(solution, encoding="utf-8")
+
+        console.print(
+            f"[bold green]Task '{slug}' is ready for review. Run 'ta mr list' to see it.[/bold green]"
+        )
 
     except Exception as e:
         console.print(f"[red]Error during ADK execution: {e}[/red]")
